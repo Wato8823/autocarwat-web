@@ -1,30 +1,18 @@
+import { TestBed } from '@angular/core/testing';
+import { ThemeStore } from './theme';
 
+describe('ThemeStore', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({});
+  });
 
-import { Injectable, effect, signal } from '@angular/core';
-
-type Theme = 'light' | 'dark';
-
-@Injectable({ providedIn: 'root' })
-export class ThemeService {
-  readonly theme = signal<Theme>(this.read());
-
-  constructor() {
-    effect(() => {
-      const t = this.theme();
-      document.documentElement.setAttribute('data-theme', t);
-      try { localStorage.setItem('theme', t); } catch {}
-    });
-  }
-
-  toggle() {
-    this.theme.update(t => (t === 'light' ? 'dark' : 'light'));
-  }
-
-  private read(): Theme {
-    try {
-      return localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
-    } catch {
-      return 'light';
-    }
-  }
-}
+  it('should toggle between light and dark themes', () => {
+    const store = TestBed.inject(ThemeStore);
+    expect(store.theme()).toBe('light');
+    store.toggle();
+    expect(store.theme()).toBe('dark');
+    store.toggle();
+    expect(store.theme()).toBe('light');
+  });
+});

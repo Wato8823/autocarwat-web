@@ -1,4 +1,7 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { AdminLayout } from './admin-layout';
 
 describe('AdminLayout', () => {
@@ -8,6 +11,7 @@ describe('AdminLayout', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AdminLayout],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AdminLayout);
@@ -15,7 +19,8 @@ describe('AdminLayout', () => {
     await fixture.whenStable();
   });
 
-  it('should create', () => {
+  it('should create with 4 admin navigation links', () => {
     expect(component).toBeTruthy();
+    expect(component.links.length).toBe(4);
   });
 });
