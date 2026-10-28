@@ -32,6 +32,9 @@ import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
           class="h-12 w-full rounded-lg bg-action font-semibold text-on-action disabled:opacity-60">
           {{ loading() ? 'Connexion…' : 'Se connecter' }}
         </button>
+        <p class="mt-4 text-center text-sm text-muted">
+          Pas encore de compte ? <a routerLink="/inscription" class="font-semibold text-primary underline">Créer un compte</a>
+        </p>
       </form>
     </div>
   `,
