@@ -1,4 +1,3 @@
-
 import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
@@ -7,7 +6,8 @@ import { AuthStore } from './auth';
 
 export const apiInterceptor: HttpInterceptorFn = (req, next) => {
   // On ne touche qu'aux requêtes vers notre API
-  if (!req.url.startsWith(environment.apiUrl)) return next(req);
+  if (req.url !== environment.apiUrl && !req.url.startsWith(`${environment.apiUrl}/`))
+    return next(req);
 
   const auth = inject(AuthStore);
   let headers = req.headers.set('Accept', 'application/json');

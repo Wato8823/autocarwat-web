@@ -2,7 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { CatalogApi, VehicleStore } from '../../../core/catalog';
-import { PART_CATEGORIES, Part } from '../../../core/models';
+import { Part } from '../../../core/models';
 import { PartCard } from '../../../shared/part-card/part-card';
 
 @Component({
@@ -21,12 +21,16 @@ import { PartCard } from '../../../shared/part-card/part-card';
           Quel est votre véhicule ?
         </h1>
         <p class="mb-6 max-w-xl text-white/85">
-          Sélectionnez la marque, le modèle et l’année pour afficher uniquement les pièces 100 % compatibles.
+          Sélectionnez la marque, le modèle et l’année pour rechercher les pièces compatibles
+          enregistrées par la boutique.
         </p>
 
         <div class="grid gap-3 sm:grid-cols-3">
           <div>
-            <label for="make" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/80">
+            <label
+              for="make"
+              class="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/80"
+            >
               1. Marque
             </label>
             <select
@@ -43,7 +47,10 @@ import { PartCard } from '../../../shared/part-card/part-card';
           </div>
 
           <div>
-            <label for="model" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/80">
+            <label
+              for="model"
+              class="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/80"
+            >
               2. Modèle
             </label>
             <select
@@ -61,7 +68,10 @@ import { PartCard } from '../../../shared/part-card/part-card';
           </div>
 
           <div>
-            <label for="year" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/80">
+            <label
+              for="year"
+              class="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/80"
+            >
               3. Année
             </label>
             <select
@@ -78,6 +88,18 @@ import { PartCard } from '../../../shared/part-card/part-card';
             </select>
           </div>
         </div>
+
+        @if (vehicles.loading()) {
+          <p class="mt-3 text-sm text-white/80">Chargement des véhicules…</p>
+        }
+        @if (vehicles.error()) {
+          <p class="mt-3 text-sm text-white/80">
+            Impossible de charger les véhicules.
+            <button type="button" (click)="vehicles.load(true)" class="font-semibold underline">
+              Réessayer
+            </button>
+          </p>
+        }
 
         <div class="mt-5 flex flex-wrap items-center gap-4">
           <button
@@ -101,9 +123,15 @@ import { PartCard } from '../../../shared/part-card/part-card';
           <div
             class="mt-5 inline-flex flex-wrap items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm"
           >
-            <span>🚗 Véhicule mémorisé : <strong>{{ v.make }} {{ v.model }} {{ v.year }}</strong></span>
+            <span
+              >🚗 Véhicule mémorisé : <strong>{{ v.make }} {{ v.model }} {{ v.year }}</strong></span
+            >
             <a routerLink="/pieces" class="font-semibold text-accent underline">Voir ses pièces</a>
-            <button type="button" (click)="clearSelection()" class="text-xs text-white/75 underline">
+            <button
+              type="button"
+              (click)="clearSelection()"
+              class="text-xs text-white/75 underline"
+            >
               Effacer
             </button>
           </div>
@@ -116,9 +144,9 @@ import { PartCard } from '../../../shared/part-card/part-card';
       <div class="mb-4 flex items-end justify-between gap-2">
         <div>
           <h2 class="font-display text-2xl font-bold text-primary sm:text-3xl">
-            Explorer par catégorie
+            Recherches rapides
           </h2>
-          <p class="text-sm text-muted">Accédez rapidement à la famille de pièces recherchée.</p>
+          <p class="text-sm text-muted">Lancez une recherche par type de pièce.</p>
         </div>
         <a routerLink="/pieces" class="text-sm font-semibold text-primary underline">Tout voir →</a>
       </div>
@@ -127,7 +155,7 @@ import { PartCard } from '../../../shared/part-card/part-card';
         @for (cat of categoryCards; track cat.name) {
           <a
             routerLink="/pieces"
-            [queryParams]="{ category: cat.name }"
+            [queryParams]="{ search: cat.query }"
             class="themed flex flex-col items-center gap-2 rounded-xl border border-line bg-surface p-4 text-center transition hover:-translate-y-0.5 hover:border-action hover:shadow-sm"
           >
             <span class="text-3xl" aria-hidden="true">{{ cat.icon }}</span>
@@ -143,12 +171,12 @@ import { PartCard } from '../../../shared/part-card/part-card';
         <div>
           <h2 class="font-display text-2xl font-bold text-primary sm:text-3xl">
             @if (vehicles.selected(); as v) {
-              Pièces populaires pour {{ v.make }} {{ v.model }} {{ v.year }}
+              À découvrir pour {{ v.make }} {{ v.model }} {{ v.year }}
             } @else {
-              Pièces les plus demandées
+              Pièces à découvrir
             }
           </h2>
-          <p class="text-sm text-muted">Disponibilité immédiate et prix affichés en FCFA.</p>
+          <p class="text-sm text-muted">Prix affichés en FCFA, stock confirmé à la commande.</p>
         </div>
         <a routerLink="/pieces" class="text-sm font-semibold text-primary underline">
           Voir tout le catalogue →
@@ -160,6 +188,17 @@ import { PartCard } from '../../../shared/part-card/part-card';
           @for (i of [1, 2, 3, 4]; track i) {
             <div class="h-80 animate-pulse rounded-xl border border-line bg-surface"></div>
           }
+        </div>
+      } @else if (featuredError()) {
+        <div role="alert" class="rounded-xl border border-line bg-surface p-5 text-sm text-muted">
+          Impossible de charger les pièces pour le moment.
+          <button
+            type="button"
+            (click)="reloadFeatured()"
+            class="font-semibold text-primary underline"
+          >
+            Réessayer
+          </button>
         </div>
       } @else if (featuredParts().length > 0) {
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -211,16 +250,25 @@ export class Home {
   year = signal<number | null>(null);
   featuredParts = signal<Part[]>([]);
   loadingFeatured = signal(true);
+  featuredError = signal(false);
+  private featuredGeneration = 0;
 
-  makes = computed(() => [...new Set(this.vehicles.all().map(v => v.make))].sort());
+  makes = computed(() => [...new Set(this.vehicles.all().map((v) => v.make))].sort());
   models = computed(() =>
-    [...new Set(this.vehicles.all().filter(v => v.make === this.make()).map(v => v.model))].sort(),
+    [
+      ...new Set(
+        this.vehicles
+          .all()
+          .filter((v) => v.make === this.make())
+          .map((v) => v.model),
+      ),
+    ].sort(),
   );
   years = computed(() =>
     this.vehicles
       .all()
-      .filter(v => v.make === this.make() && v.model === this.model())
-      .map(v => v.year)
+      .filter((v) => v.make === this.make() && v.model === this.model())
+      .map((v) => v.year)
       .sort((a, b) => b - a),
   );
 
@@ -228,18 +276,19 @@ export class Home {
     () =>
       this.vehicles
         .all()
-        .find(v => v.make === this.make() && v.model === this.model() && v.year === this.year()) ??
-      null,
+        .find(
+          (v) => v.make === this.make() && v.model === this.model() && v.year === this.year(),
+        ) ?? null,
   );
 
   categoryCards = [
-    { name: PART_CATEGORIES[0], icon: '🛑' },
-    { name: PART_CATEGORIES[1], icon: '🛢️' },
-    { name: PART_CATEGORIES[2], icon: '🔩' },
-    { name: PART_CATEGORIES[3], icon: '🔋' },
-    { name: PART_CATEGORIES[4], icon: '⚙️' },
-    { name: PART_CATEGORIES[5], icon: '❄️' },
-    { name: PART_CATEGORIES[6], icon: '💡' },
+    { name: 'Freinage', query: 'frein', icon: '🛑' },
+    { name: 'Filtres', query: 'filtre', icon: '🛢️' },
+    { name: 'Amortisseurs', query: 'amortisseur', icon: '🔩' },
+    { name: 'Batteries', query: 'batterie', icon: '🔋' },
+    { name: 'Moteur', query: 'moteur', icon: '⚙️' },
+    { name: 'Radiateurs', query: 'radiateur', icon: '❄️' },
+    { name: 'Éclairage', query: 'ampoule', icon: '💡' },
   ];
 
   arguments = [
@@ -251,12 +300,12 @@ export class Home {
     {
       icon: '📱',
       title: 'Orange Money & MTN MoMo',
-      text: 'Réglez sur nos comptes marchands officiels et transmettez votre référence ou capture de paiement.',
+      text: 'Suivez les instructions de la boutique et transmettez votre référence SMS pour vérification.',
     },
     {
       icon: '🚚',
-      title: 'Livraison partout au Cameroun',
-      text: 'Coursier express à Douala et Yaoundé, expédition sécurisée en agence dans toutes les régions.',
+      title: 'Suivi de commande',
+      text: 'Retrouvez vos commandes et consultez leur statut depuis votre espace personnel.',
     },
   ];
 
@@ -269,17 +318,17 @@ export class Home {
     {
       num: 2,
       title: 'Validez votre panier',
-      desc: 'Renseignez votre ville et votre adresse de livraison.',
+      desc: 'Vérifiez vos articles puis renseignez votre numéro Mobile Money.',
     },
     {
       num: 3,
       title: 'Envoyez la référence OM / MoMo',
-      desc: 'Effectuez le transfert Mobile Money puis saisissez l’ID de transaction ou joignez la capture.',
+      desc: 'Suivez les instructions fournies, puis saisissez la référence reçue par SMS.',
     },
     {
       num: 4,
-      title: 'Suivez la livraison',
-      desc: 'Dès validation par notre équipe, votre colis est préparé et expédié.',
+      title: 'Suivez la commande',
+      desc: 'Après vérification manuelle du paiement, suivez les changements de statut.',
     },
   ];
 
@@ -295,14 +344,25 @@ export class Home {
   }
 
   private loadFeatured(vehicleId: number | null) {
+    const generation = ++this.featuredGeneration;
     this.loadingFeatured.set(true);
-    this.catalogApi.parts({ page: 1, per_page: 4, vehicle_id: vehicleId, in_stock: true }).subscribe({
-      next: r => {
-        this.featuredParts.set(r.data.slice(0, 4));
+    this.featuredError.set(false);
+    this.catalogApi.parts({ page: 1, vehicle_id: vehicleId }).subscribe({
+      next: (r) => {
+        if (generation !== this.featuredGeneration) return;
+        this.featuredParts.set(r.data.filter((part) => part.stock > 0).slice(0, 4));
         this.loadingFeatured.set(false);
       },
-      error: () => this.loadingFeatured.set(false),
+      error: () => {
+        if (generation !== this.featuredGeneration) return;
+        this.featuredError.set(true);
+        this.loadingFeatured.set(false);
+      },
     });
+  }
+
+  reloadFeatured() {
+    this.loadFeatured(this.vehicles.selected()?.id ?? null);
   }
 
   setMake(m: string) {

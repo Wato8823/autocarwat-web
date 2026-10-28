@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AuthStore } from './auth';
+import { DemoModeService } from './demo-mode';
 
 describe('AuthStore', () => {
   let service: AuthStore;
@@ -27,7 +28,7 @@ describe('AuthStore', () => {
   });
 
   it('should store token and load user on login', () => {
-    service.login('admin@autocarwat.cm', 'Admin123456').subscribe(user => {
+    service.login('admin@autocarwat.cm', 'Admin123456').subscribe((user) => {
       expect(user.email).toBe('admin@autocarwat.cm');
     });
 
@@ -41,5 +42,26 @@ describe('AuthStore', () => {
 
     expect(service.isLoggedIn()).toBe(true);
     expect(service.isAdmin()).toBe(true);
+  });
+});
+
+describe('Isolation du jeton de démonstration', () => {
+  it('utilise et efface le jeton démo sans toucher au jeton de l’API réelle', () => {
+    localStorage.clear();
+    localStorage.setItem('token', 'real-token');
+    localStorage.setItem('autocarwat_demo_token', 'demo-token');
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: DemoModeService, useValue: { isActive: () => true } },
+      ],
+    });
+    const auth = TestBed.inject(AuthStore);
+    expect(auth.token()).toBe('demo-token');
+    auth.clear();
+    expect(localStorage.getItem('autocarwat_demo_token')).toBeNull();
+    expect(localStorage.getItem('token')).toBe('real-token');
   });
 });

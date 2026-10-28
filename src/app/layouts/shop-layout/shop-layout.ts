@@ -3,8 +3,8 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthStore } from '../../core/auth';
 import { CartStore } from '../../core/cart';
 import { VehicleStore } from '../../core/catalog';
-import { DemoBackendService } from '../../core/demo-backend';
-import { ToastStore } from '../../core/toast';
+import { DemoModeService } from '../../core/demo-mode';
+import { PaymentSessionStore } from '../../core/payment-session';
 import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
 
 @Component({
@@ -16,7 +16,7 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
         <div class="bg-amber-400 px-4 py-1.5 text-xs font-medium text-[#0F1B2A]">
           <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
             <span>
-              ⚡ <strong>Mode démo actif</strong> — API Laravel locale non détectée, données locales interactives utilisées.
+              ⚡ <strong>Mode démo actif</strong> — données fictives : aucun paiement réel.
             </span>
             <div class="flex items-center gap-3">
               <button type="button" (click)="resetDemo()" class="underline hover:no-underline">
@@ -27,6 +27,13 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
               </button>
             </div>
           </div>
+        </div>
+      } @else if (demo.available) {
+        <div class="bg-slate-100 px-4 py-1.5 text-center text-xs text-slate-700">
+          Développement ·
+          <button type="button" (click)="enableDemo()" class="font-semibold underline">
+            Activer la démonstration (sans paiement réel)
+          </button>
         </div>
       }
 
@@ -141,13 +148,25 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
         @if (mobileOpen()) {
           <div class="border-t border-white/15 bg-[#0B2035] px-4 py-4 md:hidden">
             <nav class="flex flex-col gap-2">
-              <a routerLink="/" (click)="mobileOpen.set(false)" class="rounded-lg px-3 py-2 hover:bg-white/10">
+              <a
+                routerLink="/"
+                (click)="mobileOpen.set(false)"
+                class="rounded-lg px-3 py-2 hover:bg-white/10"
+              >
                 Accueil
               </a>
-              <a routerLink="/pieces" (click)="mobileOpen.set(false)" class="rounded-lg px-3 py-2 hover:bg-white/10">
+              <a
+                routerLink="/pieces"
+                (click)="mobileOpen.set(false)"
+                class="rounded-lg px-3 py-2 hover:bg-white/10"
+              >
                 Catalogue des pièces
               </a>
-              <a routerLink="/panier" (click)="mobileOpen.set(false)" class="rounded-lg px-3 py-2 hover:bg-white/10">
+              <a
+                routerLink="/panier"
+                (click)="mobileOpen.set(false)"
+                class="rounded-lg px-3 py-2 hover:bg-white/10"
+              >
                 Mon panier ({{ cart.totalItems() }})
               </a>
               @if (auth.isLoggedIn()) {
@@ -212,17 +231,32 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
               AUTO<span class="text-accent">CARWAT</span>
             </a>
             <p class="mt-2 text-sm text-muted">
-              Spécialiste des pièces détachées automobiles neuves d’origine et équivalentes au Cameroun.
+              Spécialiste des pièces détachées automobiles neuves d’origine et équivalentes au
+              Cameroun.
             </p>
           </div>
 
           <div>
             <h2 class="mb-2 font-display text-lg font-bold text-primary">Navigation</h2>
             <ul class="space-y-1.5 text-sm text-muted">
-              <li><a routerLink="/" class="hover:text-primary hover:underline">Sélecteur de véhicule</a></li>
-              <li><a routerLink="/pieces" class="hover:text-primary hover:underline">Catalogue complet</a></li>
-              <li><a routerLink="/panier" class="hover:text-primary hover:underline">Mon panier</a></li>
-              <li><a routerLink="/commandes" class="hover:text-primary hover:underline">Suivi de commandes</a></li>
+              <li>
+                <a routerLink="/" class="hover:text-primary hover:underline"
+                  >Sélecteur de véhicule</a
+                >
+              </li>
+              <li>
+                <a routerLink="/pieces" class="hover:text-primary hover:underline"
+                  >Catalogue complet</a
+                >
+              </li>
+              <li>
+                <a routerLink="/panier" class="hover:text-primary hover:underline">Mon panier</a>
+              </li>
+              <li>
+                <a routerLink="/commandes" class="hover:text-primary hover:underline"
+                  >Suivi de commandes</a
+                >
+              </li>
             </ul>
           </div>
 
@@ -231,18 +265,22 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
             <ul class="space-y-1.5 text-sm text-muted">
               <li>🟠 Orange Money Cameroun</li>
               <li>🟡 MTN Mobile Money (MoMo)</li>
-              <li>✓ Vérification rapide de référence SMS</li>
-              <li>✓ Facture détaillée en FCFA</li>
+              <li>✓ Vérification manuelle de référence SMS</li>
+              <li>✓ Montant affiché en FCFA</li>
             </ul>
           </div>
 
           <div>
-            <h2 class="mb-2 font-display text-lg font-bold text-primary">Livraison & Contact</h2>
+            <h2 class="mb-2 font-display text-lg font-bold text-primary">Votre commande</h2>
             <ul class="space-y-1.5 text-sm text-muted">
-              <li>📍 Akwa, Douala & Bastos, Yaoundé</li>
-              <li class="num">📞 +237 699 45 12 80</li>
-              <li>🚚 Expédition dans les 10 régions</li>
-              <li>🕒 Lun – Sam : 08h00 – 18h30</li>
+              <li>📦 Consultez le statut de vos commandes</li>
+              <li>📱 Paiement depuis votre téléphone</li>
+              <li>🔒 Ne partagez jamais votre code PIN</li>
+              <li>
+                <a routerLink="/commandes" class="hover:text-primary hover:underline"
+                  >Accéder à mes commandes</a
+                >
+              </li>
             </ul>
           </div>
         </div>
@@ -257,22 +295,42 @@ export class ShopLayout {
   auth = inject(AuthStore);
   cart = inject(CartStore);
   vehicles = inject(VehicleStore);
-  demo = inject(DemoBackendService);
-  private toast = inject(ToastStore);
+  demo = inject(DemoModeService);
+  private paymentSessions = inject(PaymentSessionStore);
 
   mobileOpen = signal(false);
 
-  resetDemo() {
-    this.demo.resetDb();
+  enableDemo() {
+    if (
+      !confirm(
+        'Activer la démonstration ? Votre session et votre panier actuels seront effacés. Aucun paiement réel ne sera effectué.',
+      )
+    )
+      return;
+    this.auth.clear();
+    this.paymentSessions.clearAll();
     this.cart.clear();
-    this.vehicles.load(true);
-    this.toast.info('Données de démonstration réinitialisées.');
-    window.location.reload();
+    this.vehicles.select(null);
+    this.demo.activate();
+    window.location.assign('/');
+  }
+
+  resetDemo() {
+    if (!confirm('Réinitialiser toutes les données de démonstration ?')) return;
+    this.demo.resetDb();
+    this.auth.clear();
+    this.paymentSessions.clearAll();
+    this.cart.clear();
+    this.vehicles.select(null);
+    window.location.assign('/');
   }
 
   reconnect() {
     this.demo.reconnectApi();
-    this.toast.info('Tentative de reconnexion au serveur API Laravel…');
-    window.location.reload();
+    this.auth.clear();
+    this.paymentSessions.clearAll();
+    this.cart.clear();
+    this.vehicles.select(null);
+    window.location.assign('/');
   }
 }

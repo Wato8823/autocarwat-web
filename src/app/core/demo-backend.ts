@@ -1,45 +1,37 @@
+import { HttpErrorResponse, HttpRequest, HttpResponse } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable, delay, of, throwError } from 'rxjs';
+import { DEMO_DB_KEY } from './demo-mode';
+import type { User } from './auth';
 import {
-  HttpErrorResponse,
-  HttpInterceptorFn,
-  HttpRequest,
-  HttpResponse,
-} from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
-import { Observable, catchError, delay, of, throwError } from 'rxjs';
-import { environment } from '../../environments/environment';
-import { User } from './auth';
-import {
-  AdminStats,
-  CreateOrderPayload,
   Order,
   OrderStatus,
-  Paginated,
+  PART_CATEGORIES,
   Part,
-  PartUpsertPayload,
   Payment,
-  SubmitPaymentPayload,
+  PaymentOperator,
   Vehicle,
-  calculateShippingFee,
+  normalizeCameroonPhone,
 } from './models';
 
 interface DemoUserRecord extends User {
   password: string;
 }
-
 interface DemoPartRecord extends Omit<Part, 'vehicles'> {
   vehicle_ids: number[];
 }
-
+interface DemoOrderRecord extends Order {
+  user_id: number;
+  stock_reserved: boolean;
+}
 interface DemoDb {
   users: DemoUserRecord[];
   tokens: Record<string, number>;
   vehicles: Vehicle[];
   parts: DemoPartRecord[];
-  orders: Order[];
+  orders: DemoOrderRecord[];
   payments: Payment[];
 }
-
-const DB_KEY = 'autocarwat_demo_db_v1';
 
 function partSvg(label: string, accent: string, bg1 = '#0F2A43', bg2 = '#1B3E5E'): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
@@ -284,803 +276,519 @@ function createInitialDb(): DemoDb {
   const users: DemoUserRecord[] = [
     {
       id: 1,
-      name: 'Cabrel Wokam (Admin)',
+      name: 'Administrateur démo',
       email: 'admin@autocarwat.cm',
-      phone: '699 45 12 80',
       is_admin: true,
       password: 'Admin123456',
     },
     {
       id: 2,
-      name: 'Jean-Marc Tchoumi',
+      name: 'Client démo',
       email: 'client@autocarwat.cm',
-      phone: '694 12 34 56',
       is_admin: false,
       password: 'Client123456',
     },
   ];
-
+  const orders: DemoOrderRecord[] = [
+    {
+      id: 1,
+      user_id: 2,
+      stock_reserved: true,
+      status: 'shipped',
+      total: 116500,
+      created_at: '2026-10-25T09:30:00.000Z',
+      items: [
+        { part: parts[5].name, reference: parts[5].reference, unit_price: 92000, quantity: 1 },
+        { part: parts[0].name, reference: parts[0].reference, unit_price: 24500, quantity: 1 },
+      ],
+    },
+    {
+      id: 2,
+      user_id: 2,
+      stock_reserved: true,
+      status: 'awaiting_payment',
+      total: 31000,
+      created_at: '2026-10-28T08:05:00.000Z',
+      items: [
+        { part: parts[0].name, reference: parts[0].reference, unit_price: 24500, quantity: 1 },
+        { part: parts[2].name, reference: parts[2].reference, unit_price: 6500, quantity: 1 },
+      ],
+    },
+  ];
   const payments: Payment[] = [
     {
       id: 1,
       order_id: 1,
-      order_number: 'CMD-2026-0041',
-      customer_name: 'Jean-Marc Tchoumi',
-      customer_email: 'client@autocarwat.cm',
-      operator: 'mtn_momo',
-      sender_phone: '677 51 20 89',
-      transaction_ref: 'MOMO-261024-883412',
+      provider: 'mtn',
+      payer_phone: '600000001',
+      transaction_reference: 'DEMO-001',
       amount: 116500,
-      notes: 'Paiement effectué depuis le compte MTN MoMo personnel.',
-      status: 'approved',
-      reviewed_at: '2026-10-25T10:15:00.000Z',
+      status: 'confirmed',
+      confirmed_by: 1,
+      confirmed_at: '2026-10-25T10:15:00.000Z',
       created_at: '2026-10-25T09:42:00.000Z',
     },
     {
       id: 2,
       order_id: 2,
-      order_number: 'CMD-2026-0042',
-      customer_name: 'Jean-Marc Tchoumi',
-      customer_email: 'client@autocarwat.cm',
-      operator: 'orange_money',
-      sender_phone: '694 12 34 56',
-      transaction_ref: 'MP261028.0915.C48291',
-      amount: 33000,
-      notes: 'Transfert Orange Money effectué ce matin.',
-      status: 'pending',
+      provider: 'orange',
+      payer_phone: '600000002',
+      transaction_reference: 'DEMO-002',
+      amount: 31000,
+      status: 'initiated',
+      confirmed_by: null,
+      confirmed_at: null,
       created_at: '2026-10-28T08:15:00.000Z',
     },
   ];
-
-  const orders: Order[] = [
-    {
-      id: 1,
-      order_number: 'CMD-2026-0041',
-      user_id: 2,
-      customer_name: 'Jean-Marc Tchoumi',
-      customer_phone: '694 12 34 56',
-      customer_email: 'client@autocarwat.cm',
-      shipping_city: 'Douala',
-      shipping_address: 'Akwa, Rue Castelnau près Pharmacie du Centre',
-      notes: 'Appeler 15 min avant livraison.',
-      subtotal: 116500,
-      shipping_fee: 0,
-      total: 116500,
-      status: 'shipped',
-      items: [
-        {
-          id: 1,
-          part_id: 6,
-          part_name: 'Kit 2 amortisseurs avant à gaz Excel-G',
-          part_reference: 'SUS-KYB-3391',
-          unit_price: 92000,
-          quantity: 1,
-          subtotal: 92000,
-          image_url: parts[5].image_url,
-        },
-        {
-          id: 2,
-          part_id: 1,
-          part_name: 'Jeu de 4 plaquettes de frein avant céramique',
-          part_reference: 'BRK-TY-0987',
-          unit_price: 24500,
-          quantity: 1,
-          subtotal: 24500,
-          image_url: parts[0].image_url,
-        },
-      ],
-      payment: payments[0],
-      created_at: '2026-10-25T09:30:00.000Z',
-      updated_at: '2026-10-26T14:20:00.000Z',
-    },
-    {
-      id: 2,
-      order_number: 'CMD-2026-0042',
-      user_id: 2,
-      customer_name: 'Jean-Marc Tchoumi',
-      customer_phone: '694 12 34 56',
-      customer_email: 'client@autocarwat.cm',
-      shipping_city: 'Douala',
-      shipping_address: 'Bonamoussadi, Carrefour Maetur',
-      subtotal: 31000,
-      shipping_fee: 2000,
-      total: 33000,
-      status: 'payment_submitted',
-      items: [
-        {
-          id: 3,
-          part_id: 1,
-          part_name: 'Jeu de 4 plaquettes de frein avant céramique',
-          part_reference: 'BRK-TY-0987',
-          unit_price: 24500,
-          quantity: 1,
-          subtotal: 24500,
-          image_url: parts[0].image_url,
-        },
-        {
-          id: 4,
-          part_id: 3,
-          part_name: 'Filtre à huile moteur longue durée',
-          part_reference: 'FLT-MN-W68',
-          unit_price: 6500,
-          quantity: 1,
-          subtotal: 6500,
-          image_url: parts[2].image_url,
-        },
-      ],
-      payment: payments[1],
-      created_at: '2026-10-28T08:05:00.000Z',
-      updated_at: '2026-10-28T08:15:00.000Z',
-    },
-  ];
-
-  return {
-    users,
-    tokens: {},
-    vehicles,
-    parts,
-    orders,
-    payments,
-  };
+  return { users, tokens: {}, vehicles, parts, orders, payments };
 }
 
 @Injectable({ providedIn: 'root' })
 export class DemoBackendService {
-  readonly isActive = signal(false);
-
-  activate() {
-    if (!this.isActive()) {
-      this.isActive.set(true);
-    }
-  }
-
-  reconnectApi() {
-    this.isActive.set(false);
-  }
-
-  resetDb() {
-    const fresh = createInitialDb();
-    this.writeDb(fresh);
-  }
-
   private readDb(): DemoDb {
     try {
-      const raw = localStorage.getItem(DB_KEY);
+      const raw = localStorage.getItem(DEMO_DB_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoDb;
-        if (parsed && Array.isArray(parsed.parts) && Array.isArray(parsed.users)) {
+        if (
+          Array.isArray(parsed.parts) &&
+          Array.isArray(parsed.users) &&
+          Array.isArray(parsed.orders)
+        )
           return parsed;
-        }
       }
     } catch {}
-    const initial = createInitialDb();
-    this.writeDb(initial);
-    return initial;
+    const db = createInitialDb();
+    this.writeDb(db);
+    return db;
   }
-
   private writeDb(db: DemoDb) {
     try {
-      localStorage.setItem(DB_KEY, JSON.stringify(db));
+      localStorage.setItem(DEMO_DB_KEY, JSON.stringify(db));
     } catch {}
   }
-
-  private hydratePart(p: DemoPartRecord, vehicles: Vehicle[]): Part {
+  private part(p: DemoPartRecord, vehicles: Vehicle[]): Part {
     const { vehicle_ids, ...rest } = p;
-    return {
-      ...rest,
-      vehicles: vehicles.filter(v => vehicle_ids.includes(v.id)),
-    };
+    return { ...rest, vehicles: vehicles.filter((v) => vehicle_ids.includes(v.id)) };
   }
-
+  private order(o: DemoOrderRecord): Order {
+    const { user_id: _, stock_reserved: __, ...resource } = o;
+    return resource;
+  }
   private currentUser(req: HttpRequest<unknown>, db: DemoDb): DemoUserRecord | null {
-    const authHeader = req.headers.get('Authorization') ?? '';
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    if (!token) return null;
-    const uid = db.tokens[token];
-    if (!uid) return null;
-    return db.users.find(u => u.id === uid) ?? null;
+    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
+    return db.users.find((user) => user.id === db.tokens[token]) ?? null;
   }
-
   private ok<T>(body: T, status = 200): Observable<HttpResponse<T>> {
     return of(new HttpResponse({ status, body })).pipe(delay(80));
   }
-
-  private err(status: number, message: string, errors?: Record<string, string[]>): Observable<never> {
+  private err(
+    status: number,
+    message: string,
+    errors?: Record<string, string[]>,
+  ): Observable<never> {
     return throwError(
-      () =>
-        new HttpErrorResponse({
-          status,
-          error: errors ? { message, errors } : { message },
-        }),
+      () => new HttpErrorResponse({ status, error: errors ? { message, errors } : { message } }),
     );
+  }
+  private page<T>(items: T[], req: HttpRequest<unknown>, size: number) {
+    const requested = Math.max(1, Number(req.params.get('page')) || 1);
+    const last = Math.max(1, Math.ceil(items.length / size));
+    const page = Math.min(requested, last);
+    return {
+      data: items.slice((page - 1) * size, page * size),
+      current_page: page,
+      last_page: last,
+      per_page: size,
+      total: items.length,
+    };
+  }
+  private paymentWithOrder(p: Payment, db: DemoDb): Payment {
+    const order = db.orders.find((o) => o.id === p.order_id);
+    const user = db.users.find((u) => u.id === order?.user_id);
+    return {
+      ...p,
+      order: order
+        ? { id: order.id, user: user ? { id: user.id, name: user.name, email: user.email } : null }
+        : null,
+    };
   }
 
   handle(req: HttpRequest<unknown>): Observable<HttpResponse<unknown>> {
-    this.activate();
     const db = this.readDb();
-    const urlObj = new URL(req.url, 'http://localhost');
-    const path = urlObj.pathname.replace(/^\/api/, '') || '/';
+    const path = new URL(req.url, 'http://localhost').pathname.replace(/^\/api/, '') || '/';
     const method = req.method.toUpperCase();
     const body = (req.body ?? {}) as Record<string, any>;
 
-    // --- AUTH ---
     if (method === 'POST' && path === '/login') {
-      const email = String(body['email'] ?? '').trim().toLowerCase();
-      const password = String(body['password'] ?? '');
-      const user = db.users.find(u => u.email.toLowerCase() === email && u.password === password);
-      if (!user) {
-        return this.err(401, 'Identifiants incorrects. Vérifiez votre e-mail et votre mot de passe.');
-      }
+      const user = db.users.find(
+        (u) =>
+          u.email.toLowerCase() ===
+            String(body['email'] ?? '')
+              .trim()
+              .toLowerCase() && u.password === body['password'],
+      );
+      if (!user)
+        return this.err(422, 'Identifiants invalides.', { email: ['Identifiants invalides.'] });
+      for (const [token, id] of Object.entries(db.tokens))
+        if (id === user.id) delete db.tokens[token];
       const token = `demo_${user.id}_${Date.now()}`;
       db.tokens[token] = user.id;
       this.writeDb(db);
       return this.ok({ token });
     }
-
     if (method === 'POST' && path === '/register') {
       const name = String(body['name'] ?? '').trim();
-      const email = String(body['email'] ?? '').trim().toLowerCase();
-      const phone = String(body['phone'] ?? '').trim();
+      const email = String(body['email'] ?? '')
+        .trim()
+        .toLowerCase();
       const password = String(body['password'] ?? '');
-      const confirm = String(body['password_confirmation'] ?? '');
       const errors: Record<string, string[]> = {};
-      if (!name) errors['name'] = ['Le nom complet est obligatoire.'];
-      if (!email || !email.includes('@')) errors['email'] = ['Adresse e-mail invalide.'];
-      if (db.users.some(u => u.email.toLowerCase() === email)) {
-        errors['email'] = ['Cette adresse e-mail est déjà utilisée.'];
-      }
-      if (password.length < 10) {
-        errors['password'] = ['Le mot de passe doit contenir au moins 10 caractères.'];
-      } else if (password !== confirm) {
-        errors['password'] = ['La confirmation du mot de passe ne correspond pas.'];
-      }
-      if (Object.keys(errors).length) {
-        return this.err(422, 'Données invalides.', errors);
-      }
-      const id = Math.max(0, ...db.users.map(u => u.id)) + 1;
-      const newUser: DemoUserRecord = {
-        id,
-        name,
-        email,
-        phone: phone || null,
-        is_admin: false,
-        password,
-      };
-      db.users.push(newUser);
+      if (!name) errors['name'] = ['Le nom est obligatoire.'];
+      if (!email.includes('@') || db.users.some((u) => u.email.toLowerCase() === email))
+        errors['email'] = ['Adresse e-mail invalide ou déjà utilisée.'];
+      if (
+        password.length < 10 ||
+        !/[A-Za-z]/.test(password) ||
+        !/\d/.test(password) ||
+        password !== body['password_confirmation']
+      )
+        errors['password'] = ['Mot de passe ou confirmation invalide.'];
+      if (Object.keys(errors).length) return this.err(422, 'Données invalides.', errors);
+      const id = Math.max(0, ...db.users.map((u) => u.id)) + 1;
+      db.users.push({ id, name, email, is_admin: false, password });
       const token = `demo_${id}_${Date.now()}`;
       db.tokens[token] = id;
       this.writeDb(db);
       return this.ok({ token }, 201);
     }
-
-    if (method === 'GET' && path === '/me') {
+    if (method === 'GET' && (path === '/me' || path === '/user')) {
       const user = this.currentUser(req, db);
       if (!user) return this.err(401, 'Session expirée.');
-      const { password: _, ...safeUser } = user;
-      return this.ok(safeUser);
+      const { password: _, ...safe } = user;
+      return this.ok(safe);
     }
-
     if (method === 'POST' && path === '/logout') {
-      const authHeader = req.headers.get('Authorization') ?? '';
-      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-      if (token) {
-        delete db.tokens[token];
-        this.writeDb(db);
-      }
-      return this.ok({ message: 'Déconnecté' });
+      const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
+      delete db.tokens[token];
+      this.writeDb(db);
+      return this.ok(null, 204);
     }
 
-    // --- PUBLIC CATALOG ---
     if (method === 'GET' && path === '/vehicles') {
-      return this.ok([...db.vehicles]);
+      const make = (req.params.get('make') ?? '').toLowerCase();
+      return this.ok(
+        this.page(
+          db.vehicles.filter((v) => !make || v.make.toLowerCase() === make),
+          req,
+          15,
+        ),
+      );
     }
-
     if (method === 'GET' && path === '/parts') {
-      const search = (req.params.get('search') ?? '').trim().toLowerCase();
+      const search = (req.params.get('search') ?? '').trim().toLowerCase().replace(/[\s-]/g, '');
       const vehicleId = Number(req.params.get('vehicle_id') ?? 0);
-      const category = (req.params.get('category') ?? '').trim();
-      const brand = (req.params.get('brand') ?? '').trim();
-      const inStock = req.params.get('in_stock') === '1';
-      const sort = req.params.get('sort') ?? 'newest';
-      const page = Math.max(1, Number(req.params.get('page') ?? 1));
-      const perPage = Math.max(1, Number(req.params.get('per_page') ?? 8));
-
-      let filtered = db.parts.filter(p => {
-        if (vehicleId && !p.vehicle_ids.includes(vehicleId)) return false;
-        if (category && p.category !== category) return false;
-        if (brand && p.brand !== brand) return false;
-        if (inStock && p.stock <= 0) return false;
-        if (search) {
-          const hay = `${p.name} ${p.reference} ${p.oem_number ?? ''} ${p.brand ?? ''} ${p.category ?? ''}`.toLowerCase();
-          if (!hay.includes(search)) return false;
-        }
-        return true;
-      });
-
-      if (sort === 'price_asc') filtered = [...filtered].sort((a, b) => a.price - b.price);
-      else if (sort === 'price_desc') filtered = [...filtered].sort((a, b) => b.price - a.price);
-      else if (sort === 'name_asc') filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-      else filtered = [...filtered].sort((a, b) => b.id - a.id);
-
-      const total = filtered.length;
-      const lastPage = Math.max(1, Math.ceil(total / perPage));
-      const safePage = Math.min(page, lastPage);
-      const slice = filtered
-        .slice((safePage - 1) * perPage, safePage * perPage)
-        .map(p => this.hydratePart(p, db.vehicles));
-
-      const response: Paginated<Part> = {
-        data: slice,
-        meta: { current_page: safePage, last_page: lastPage, total, per_page: perPage },
-      };
-      return this.ok(response);
+      const categoryId = Number(req.params.get('category_id') ?? 0);
+      const make = (req.params.get('make') ?? '').trim().toLowerCase();
+      const filtered = db.parts
+        .filter((p) => {
+          if (vehicleId && !p.vehicle_ids.includes(vehicleId)) return false;
+          if (
+            make &&
+            !p.vehicle_ids.some((id) =>
+              db.vehicles.some((v) => v.id === id && v.make.toLowerCase() === make),
+            )
+          )
+            return false;
+          if (categoryId && p.category !== PART_CATEGORIES[categoryId - 1]) return false;
+          const hay = `${p.name} ${p.reference} ${p.oem_number ?? ''}`
+            .toLowerCase()
+            .replace(/[\s-]/g, '');
+          return !search || hay.includes(search);
+        })
+        .sort((a, b) => b.id - a.id)
+        .map((p) => this.part(p, db.vehicles));
+      return this.ok(this.page(filtered, req, 15));
+    }
+    const partMatch = path.match(/^\/parts\/(\d+)$/);
+    if (method === 'GET' && partMatch) {
+      const part = db.parts.find((p) => p.id === Number(partMatch[1]));
+      return part ? this.ok(this.part(part, db.vehicles)) : this.err(404, 'Pièce introuvable.');
     }
 
-    const partDetailMatch = path.match(/^\/parts\/(\d+)$/);
-    if (method === 'GET' && partDetailMatch) {
-      const id = Number(partDetailMatch[1]);
-      const found = db.parts.find(p => p.id === id);
-      if (!found) return this.err(404, 'Pièce introuvable.');
-      return this.ok({ data: this.hydratePart(found, db.vehicles) });
-    }
-
-    // --- CUSTOMER ORDERS & PAYMENTS ---
     if (path.startsWith('/orders')) {
       const user = this.currentUser(req, db);
-      if (!user) return this.err(401, 'Veuillez vous connecter pour accéder à vos commandes.');
-
+      if (!user) return this.err(401, 'Authentification requise.');
       if (method === 'GET' && path === '/orders') {
-        const list = db.orders
-          .filter(o => o.user_id === user.id || user.is_admin)
-          .sort((a, b) => b.id - a.id);
-        return this.ok({ data: list });
+        const orders = db.orders
+          .filter((o) => o.user_id === user.id)
+          .sort((a, b) => b.id - a.id)
+          .map((o) => this.order(o));
+        return this.ok(this.page(orders, req, 10));
       }
-
       if (method === 'POST' && path === '/orders') {
-        const payload = body as CreateOrderPayload;
-        if (!payload.items?.length) {
-          return this.err(422, 'Votre panier est vide.');
+        const items = body['items'];
+        if (!Array.isArray(items) || !items.length) return this.err(422, 'Votre panier est vide.');
+        const quantities = new Map<number, number>();
+        for (const item of items) {
+          const id = Number(item.part_id);
+          const quantity = Number(item.quantity);
+          if (!Number.isInteger(id) || !Number.isInteger(quantity) || quantity < 1)
+            return this.err(422, 'Quantité invalide.');
+          quantities.set(id, (quantities.get(id) ?? 0) + quantity);
         }
-        const errors: Record<string, string[]> = {};
-        if (!payload.customer_name?.trim()) errors['customer_name'] = ['Le nom du destinataire est requis.'];
-        if (!payload.customer_phone?.trim()) errors['customer_phone'] = ['Le numéro de téléphone est requis.'];
-        if (!payload.shipping_city?.trim()) errors['shipping_city'] = ['La ville est requise.'];
-        if (!payload.shipping_address?.trim()) errors['shipping_address'] = ['L’adresse de livraison est requise.'];
-        if (Object.keys(errors).length) return this.err(422, 'Veuillez vérifier les champs.', errors);
-
-        const orderItems = [];
-        let subtotal = 0;
-        let nextItemId =
-          Math.max(0, ...db.orders.flatMap(o => o.items.map(i => i.id))) + 1;
-
-        for (const reqItem of payload.items) {
-          const part = db.parts.find(p => p.id === reqItem.part_id);
-          if (!part) return this.err(422, `Pièce #${reqItem.part_id} introuvable.`);
-          if (part.stock < reqItem.quantity) {
-            return this.err(422, `Stock insuffisant pour "${part.name}" (${part.stock} restant).`);
-          }
-          part.stock -= reqItem.quantity;
-          const lineSub = part.price * reqItem.quantity;
-          subtotal += lineSub;
-          orderItems.push({
-            id: nextItemId++,
-            part_id: part.id,
-            part_name: part.name,
-            part_reference: part.reference,
-            unit_price: part.price,
-            quantity: reqItem.quantity,
-            subtotal: lineSub,
-            image_url: part.image_url,
-          });
+        // Vérifier tout le stock avant de le modifier.
+        for (const [id, quantity] of quantities) {
+          const part = db.parts.find((p) => p.id === id);
+          if (!part) return this.err(404, 'Pièce introuvable.');
+          if (part.stock < quantity)
+            return this.err(422, `Stock insuffisant pour « ${part.name} ».`);
         }
-
-        const shippingFee = calculateShippingFee(subtotal, payload.shipping_city);
-        const total = subtotal + shippingFee;
-        const orderId = Math.max(40, ...db.orders.map(o => o.id)) + 1;
-        const orderNumber = `CMD-2026-${String(orderId).padStart(4, '0')}`;
-        const now = new Date().toISOString();
-
-        let payment: Payment | null = null;
-        let status: OrderStatus = 'pending_payment';
-
-        if (payload.payment?.transaction_ref?.trim()) {
-          const payId = Math.max(0, ...db.payments.map(p => p.id)) + 1;
-          payment = {
-            id: payId,
-            order_id: orderId,
-            order_number: orderNumber,
-            customer_name: payload.customer_name.trim(),
-            customer_email: user.email,
-            operator: payload.payment.operator,
-            sender_phone: payload.payment.sender_phone.trim(),
-            transaction_ref: payload.payment.transaction_ref.trim().toUpperCase(),
-            amount: total,
-            proof_url: payload.payment.proof_url ?? null,
-            proof_name: payload.payment.proof_name ?? null,
-            notes: payload.payment.notes?.trim() || null,
-            status: 'pending',
-            created_at: now,
-          };
-          db.payments.push(payment);
-          status = 'payment_submitted';
-        }
-
-        const order: Order = {
-          id: orderId,
-          order_number: orderNumber,
+        const orderItems = [...quantities].map(([id, quantity]) => {
+          const part = db.parts.find((p) => p.id === id)!;
+          part.stock -= quantity;
+          return { part: part.name, reference: part.reference, quantity, unit_price: part.price };
+        });
+        const order: DemoOrderRecord = {
+          id: Math.max(0, ...db.orders.map((o) => o.id)) + 1,
           user_id: user.id,
-          customer_name: payload.customer_name.trim(),
-          customer_phone: payload.customer_phone.trim(),
-          customer_email: user.email,
-          shipping_city: payload.shipping_city.trim(),
-          shipping_address: payload.shipping_address.trim(),
-          notes: payload.notes?.trim() || null,
-          subtotal,
-          shipping_fee: shippingFee,
-          total,
-          status,
+          stock_reserved: true,
+          status: 'pending',
+          total: orderItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0),
+          created_at: new Date().toISOString(),
           items: orderItems,
-          payment,
-          created_at: now,
-          updated_at: now,
         };
-
         db.orders.push(order);
         this.writeDb(db);
-        return this.ok({ data: order }, 201);
+        return this.ok(this.order(order), 201);
       }
-
-      const orderDetailMatch = path.match(/^\/orders\/(\d+)$/);
-      if (method === 'GET' && orderDetailMatch) {
-        const id = Number(orderDetailMatch[1]);
-        const order = db.orders.find(o => o.id === id);
-        if (!order || (order.user_id !== user.id && !user.is_admin)) {
-          return this.err(404, 'Commande introuvable.');
-        }
-        return this.ok({ data: order });
-      }
-
-      const orderCancelMatch = path.match(/^\/orders\/(\d+)\/cancel$/);
-      if (method === 'POST' && orderCancelMatch) {
-        const id = Number(orderCancelMatch[1]);
-        const order = db.orders.find(o => o.id === id);
-        if (!order || (order.user_id !== user.id && !user.is_admin)) {
-          return this.err(404, 'Commande introuvable.');
-        }
-        if (!['pending_payment', 'payment_submitted'].includes(order.status)) {
-          return this.err(422, 'Cette commande ne peut plus être annulée.');
-        }
-        order.status = 'cancelled';
-        order.updated_at = new Date().toISOString();
-        for (const item of order.items) {
-          const part = db.parts.find(p => p.id === item.part_id);
-          if (part) part.stock += item.quantity;
-        }
-        if (order.payment && order.payment.status === 'pending') {
-          order.payment.status = 'rejected';
-          order.payment.rejection_reason = 'Commande annulée par le client.';
-          const pRec = db.payments.find(p => p.id === order.payment?.id);
-          if (pRec) {
-            pRec.status = 'rejected';
-            pRec.rejection_reason = 'Commande annulée par le client.';
+      const match = path.match(/^\/orders\/(\d+)(?:\/(cancel|payment|payment\/reference))?$/);
+      if (match) {
+        const order = db.orders.find((o) => o.id === Number(match[1]));
+        if (!order) return this.err(404, 'Commande introuvable.');
+        if (order.user_id !== user.id)
+          return this.err(403, 'Cette commande ne vous appartient pas.');
+        if (method === 'GET' && !match[2]) return this.ok(this.order(order));
+        if (method === 'POST' && match[2] === 'cancel') {
+          if (!['pending', 'awaiting_payment'].includes(order.status))
+            return this.err(422, 'Cette commande ne peut plus être annulée.');
+          order.status = 'cancelled';
+          if (order.stock_reserved) {
+            for (const item of order.items) {
+              const part = db.parts.find((p) => p.reference === item.reference);
+              if (part) part.stock += item.quantity;
+            }
+            order.stock_reserved = false;
           }
+          for (const p of db.payments.filter(
+            (p) => p.order_id === order.id && p.status === 'initiated',
+          ))
+            p.status = 'rejected';
+          this.writeDb(db);
+          return this.ok(this.order(order));
         }
-        this.writeDb(db);
-        return this.ok({ data: order });
-      }
-
-      const orderPaymentMatch = path.match(/^\/orders\/(\d+)\/payment$/);
-      if (method === 'POST' && orderPaymentMatch) {
-        const id = Number(orderPaymentMatch[1]);
-        const order = db.orders.find(o => o.id === id);
-        if (!order || (order.user_id !== user.id && !user.is_admin)) {
-          return this.err(404, 'Commande introuvable.');
+        if (method === 'POST' && match[2] === 'payment') {
+          if (!['pending', 'awaiting_payment'].includes(order.status))
+            return this.err(422, 'Cette commande ne peut plus être payée.');
+          const provider = body['provider'] as PaymentOperator;
+          const phone = normalizeCameroonPhone(String(body['phone'] ?? ''));
+          if (!['orange', 'mtn'].includes(provider) || !phone)
+            return this.err(422, 'Informations de paiement invalides.', {
+              phone: ['Numéro de téléphone invalide.'],
+            });
+          const payment: Payment = {
+            id: Math.max(0, ...db.payments.map((p) => p.id)) + 1,
+            order_id: order.id,
+            provider,
+            payer_phone: phone,
+            transaction_reference: null,
+            amount: order.total,
+            status: 'initiated',
+            confirmed_by: null,
+            confirmed_at: null,
+            created_at: new Date().toISOString(),
+          };
+          db.payments.push(payment);
+          order.status = 'awaiting_payment';
+          this.writeDb(db);
+          return this.ok(
+            {
+              payment_id: payment.id,
+              order_status: order.status,
+              provider,
+              amount: order.total,
+              cashier_number: 'Compte de démonstration',
+              ussd_code: 'Simulation — aucun code à composer',
+              dial_uri: '',
+              instructions:
+                'Simulation uniquement : aucun transfert réel ne doit être effectué. Saisissez une référence fictive pour continuer.',
+            },
+            201,
+          );
         }
-        const payload = body as SubmitPaymentPayload;
-        const errors: Record<string, string[]> = {};
-        if (!payload.sender_phone?.trim()) errors['sender_phone'] = ['Le numéro émetteur est obligatoire.'];
-        if (!payload.transaction_ref?.trim()) errors['transaction_ref'] = ['La référence de transaction est obligatoire.'];
-        if (Object.keys(errors).length) return this.err(422, 'Informations manquantes.', errors);
-
-        const now = new Date().toISOString();
-        const payId = Math.max(0, ...db.payments.map(p => p.id)) + 1;
-        const payment: Payment = {
-          id: payId,
-          order_id: order.id,
-          order_number: order.order_number,
-          customer_name: order.customer_name,
-          customer_email: order.customer_email ?? user.email,
-          operator: payload.operator,
-          sender_phone: payload.sender_phone.trim(),
-          transaction_ref: payload.transaction_ref.trim().toUpperCase(),
-          amount: order.total,
-          proof_url: payload.proof_url ?? null,
-          proof_name: payload.proof_name ?? null,
-          notes: payload.notes?.trim() || null,
-          status: 'pending',
-          created_at: now,
-        };
-        db.payments.push(payment);
-        order.payment = payment;
-        order.status = 'payment_submitted';
-        order.updated_at = now;
-        this.writeDb(db);
-        return this.ok({ data: payment }, 201);
+        if (method === 'POST' && match[2] === 'payment/reference') {
+          const reference = String(body['transaction_reference'] ?? '').trim();
+          const payment = [...db.payments]
+            .reverse()
+            .find((p) => p.order_id === order.id && p.status === 'initiated');
+          if (!payment || order.status !== 'awaiting_payment')
+            return this.err(422, 'Aucun paiement en cours pour cette commande.');
+          if (!reference)
+            return this.err(422, 'La référence est obligatoire.', {
+              transaction_reference: ['La référence est obligatoire.'],
+            });
+          if (db.payments.some((p) => p.transaction_reference === reference && p.id !== payment.id))
+            return this.err(422, 'Cette référence est déjà utilisée.');
+          payment.transaction_reference = reference;
+          this.writeDb(db);
+          return this.ok({ message: 'Référence enregistrée. En attente de validation.' });
+        }
       }
     }
 
-    // --- ADMIN ROUTES ---
     if (path.startsWith('/admin')) {
       const user = this.currentUser(req, db);
       if (!user) return this.err(401, 'Authentification requise.');
       if (!user.is_admin) return this.err(403, 'Accès réservé aux administrateurs.');
-
-      if (method === 'GET' && path === '/admin/stats') {
-        const paidStatuses: OrderStatus[] = ['paid', 'preparing', 'shipped', 'delivered'];
-        const totalRevenue = db.orders
-          .filter(o => paidStatuses.includes(o.status))
-          .reduce((s, o) => s + o.total, 0);
-        const pendingPayments = db.payments
-          .filter(p => p.status === 'pending')
-          .sort((a, b) => b.id - a.id);
-        const lowStockParts = db.parts
-          .filter(p => p.stock <= 5)
-          .sort((a, b) => a.stock - b.stock)
-          .map(p => this.hydratePart(p, db.vehicles));
-
-        const stats: AdminStats = {
-          total_revenue: totalRevenue,
-          orders_count: db.orders.length,
-          pending_payments_count: pendingPayments.length,
-          low_stock_count: lowStockParts.length,
-          parts_count: db.parts.length,
-          vehicles_count: db.vehicles.length,
-          recent_orders: [...db.orders].sort((a, b) => b.id - a.id).slice(0, 5),
-          pending_payments: pendingPayments.slice(0, 5),
-          low_stock_parts: lowStockParts.slice(0, 6),
-        };
-        return this.ok({ data: stats });
-      }
-
       if (method === 'GET' && path === '/admin/payments') {
-        const status = req.params.get('status') ?? '';
-        const operator = req.params.get('operator') ?? '';
-        const search = (req.params.get('search') ?? '').trim().toLowerCase();
-        const list = db.payments
-          .filter(p => {
-            if (status && p.status !== status) return false;
-            if (operator && p.operator !== operator) return false;
-            if (search) {
-              const hay = `${p.transaction_ref} ${p.order_number ?? ''} ${p.sender_phone} ${p.customer_name ?? ''}`.toLowerCase();
-              if (!hay.includes(search)) return false;
+        const status = req.params.get('status') ?? 'initiated';
+        const payments = db.payments
+          .filter((p) => p.status === status)
+          .sort((a, b) => b.id - a.id)
+          .map((p) => this.paymentWithOrder(p, db));
+        return this.ok(this.page(payments, req, 20));
+      }
+      const payMatch = path.match(/^\/admin\/payments\/(\d+)\/(confirm|reject)$/);
+      if (method === 'POST' && payMatch) {
+        const payment = db.payments.find((p) => p.id === Number(payMatch[1]));
+        if (!payment) return this.err(404, 'Paiement introuvable.');
+        if (payment.status !== 'initiated') return this.err(422, 'Ce paiement a déjà été traité.');
+        const order = db.orders.find((o) => o.id === payment.order_id);
+        if (!order || order.status !== 'awaiting_payment')
+          return this.err(422, 'Commande non payable.');
+        if (payMatch[2] === 'confirm') {
+          if (!payment.transaction_reference)
+            return this.err(422, 'La référence de transaction est requise.');
+          payment.status = 'confirmed';
+          payment.confirmed_by = user.id;
+          payment.confirmed_at = new Date().toISOString();
+          order.status = 'paid';
+        } else {
+          payment.status = 'rejected';
+          order.status = 'pending';
+          if (order.stock_reserved) {
+            for (const item of order.items) {
+              const part = db.parts.find((p) => p.reference === item.reference);
+              if (part) part.stock += item.quantity;
             }
-            return true;
-          })
-          .sort((a, b) => b.id - a.id);
-        return this.ok({ data: list });
-      }
-
-      const approveMatch = path.match(/^\/admin\/payments\/(\d+)\/approve$/);
-      if (method === 'POST' && approveMatch) {
-        const id = Number(approveMatch[1]);
-        const payment = db.payments.find(p => p.id === id);
-        if (!payment) return this.err(404, 'Paiement introuvable.');
-        const now = new Date().toISOString();
-        payment.status = 'approved';
-        payment.rejection_reason = null;
-        payment.reviewed_at = now;
-
-        const order = db.orders.find(o => o.id === payment.order_id);
-        if (order) {
-          if (['pending_payment', 'payment_submitted'].includes(order.status)) {
-            order.status = 'paid';
+            order.stock_reserved = false;
           }
-          order.payment = { ...payment };
-          order.updated_at = now;
         }
         this.writeDb(db);
-        return this.ok({ data: payment });
+        return this.ok({ ...payment, order: this.order(order) });
       }
-
-      const rejectMatch = path.match(/^\/admin\/payments\/(\d+)\/reject$/);
-      if (method === 'POST' && rejectMatch) {
-        const id = Number(rejectMatch[1]);
-        const payment = db.payments.find(p => p.id === id);
-        if (!payment) return this.err(404, 'Paiement introuvable.');
-        const reason = String(body['rejection_reason'] ?? body['reason'] ?? '').trim();
-        if (!reason) {
-          return this.err(422, 'Veuillez indiquer le motif du rejet.');
-        }
-        const now = new Date().toISOString();
-        payment.status = 'rejected';
-        payment.rejection_reason = reason;
-        payment.reviewed_at = now;
-
-        const order = db.orders.find(o => o.id === payment.order_id);
-        if (order) {
-          if (order.status === 'payment_submitted') {
-            order.status = 'pending_payment';
-          }
-          order.payment = { ...payment };
-          order.updated_at = now;
-        }
-        this.writeDb(db);
-        return this.ok({ data: payment });
-      }
-
       if (method === 'GET' && path === '/admin/orders') {
         const status = req.params.get('status') ?? '';
-        const search = (req.params.get('search') ?? '').trim().toLowerCase();
-        const list = db.orders
-          .filter(o => {
-            if (status && o.status !== status) return false;
-            if (search) {
-              const hay = `${o.order_number} ${o.customer_name} ${o.customer_phone} ${o.shipping_city}`.toLowerCase();
-              if (!hay.includes(search)) return false;
-            }
-            return true;
-          })
-          .sort((a, b) => b.id - a.id);
-        return this.ok({ data: list });
-      }
-
-      const orderStatusMatch = path.match(/^\/admin\/orders\/(\d+)\/status$/);
-      if (method === 'PATCH' && orderStatusMatch) {
-        const id = Number(orderStatusMatch[1]);
-        const order = db.orders.find(o => o.id === id);
-        if (!order) return this.err(404, 'Commande introuvable.');
-        const nextStatus = body['status'] as OrderStatus;
-        if (nextStatus === 'cancelled' && order.status !== 'cancelled') {
-          for (const item of order.items) {
-            const p = db.parts.find(part => part.id === item.part_id);
-            if (p) p.stock += item.quantity;
-          }
-        }
-        order.status = nextStatus;
-        order.updated_at = new Date().toISOString();
-        this.writeDb(db);
-        return this.ok({ data: order });
-      }
-
-      if (method === 'GET' && path === '/admin/parts') {
-        const search = (req.params.get('search') ?? '').trim().toLowerCase();
-        const category = (req.params.get('category') ?? '').trim();
-        const stock = req.params.get('stock') ?? 'all';
-        const list = db.parts
-          .filter(p => {
-            if (category && p.category !== category) return false;
-            if (stock === 'low' && (p.stock <= 0 || p.stock > 5)) return false;
-            if (stock === 'out' && p.stock > 0) return false;
-            if (search) {
-              const hay = `${p.name} ${p.reference} ${p.oem_number ?? ''} ${p.brand ?? ''}`.toLowerCase();
-              if (!hay.includes(search)) return false;
-            }
-            return true;
-          })
+        const orders = db.orders
+          .filter((o) => !status || o.status === status)
           .sort((a, b) => b.id - a.id)
-          .map(p => this.hydratePart(p, db.vehicles));
-        return this.ok({ data: list });
+          .map((o) => this.order(o));
+        return this.ok(this.page(orders, req, 20));
       }
-
-      if (method === 'POST' && path === '/admin/parts') {
-        const payload = body as PartUpsertPayload;
-        if (!payload.name?.trim() || !payload.reference?.trim()) {
-          return this.err(422, 'Le nom et la référence sont obligatoires.');
-        }
-        const id = Math.max(0, ...db.parts.map(p => p.id)) + 1;
-        const created: DemoPartRecord = {
-          id,
-          name: payload.name.trim(),
-          reference: payload.reference.trim().toUpperCase(),
-          oem_number: payload.oem_number?.trim() || null,
-          brand: payload.brand?.trim() || 'Générique',
-          category: payload.category?.trim() || 'Freinage',
-          description: payload.description?.trim() || null,
-          price: Math.max(0, Number(payload.price) || 0),
-          stock: Math.max(0, Number(payload.stock) || 0),
-          image_url:
-            payload.image_url?.trim() ||
-            partSvg(payload.name.trim().slice(0, 24).toUpperCase(), '#FF7A1F'),
-          vehicle_ids: Array.isArray(payload.vehicle_ids) ? payload.vehicle_ids : [],
+      const statusMatch = path.match(/^\/admin\/orders\/(\d+)\/status$/);
+      if (method === 'PATCH' && statusMatch) {
+        const order = db.orders.find((o) => o.id === Number(statusMatch[1]));
+        if (!order) return this.err(404, 'Commande introuvable.');
+        const transitions: Record<OrderStatus, OrderStatus[]> = {
+          pending: ['awaiting_payment', 'cancelled'],
+          awaiting_payment: ['pending', 'cancelled'],
+          paid: ['shipped', 'cancelled'],
+          shipped: ['delivered'],
+          delivered: [],
+          cancelled: [],
         };
-        db.parts.push(created);
-        this.writeDb(db);
-        return this.ok({ data: this.hydratePart(created, db.vehicles) }, 201);
-      }
-
-      const partIdMatch = path.match(/^\/admin\/parts\/(\d+)$/);
-      if (partIdMatch && method === 'PUT') {
-        const id = Number(partIdMatch[1]);
-        const idx = db.parts.findIndex(p => p.id === id);
-        if (idx === -1) return this.err(404, 'Pièce introuvable.');
-        const payload = body as PartUpsertPayload;
-        const updated: DemoPartRecord = {
-          ...db.parts[idx],
-          name: payload.name.trim(),
-          reference: payload.reference.trim().toUpperCase(),
-          oem_number: payload.oem_number?.trim() || null,
-          brand: payload.brand?.trim() || 'Générique',
-          category: payload.category?.trim() || 'Freinage',
-          description: payload.description?.trim() || null,
-          price: Math.max(0, Number(payload.price) || 0),
-          stock: Math.max(0, Number(payload.stock) || 0),
-          image_url:
-            payload.image_url?.trim() ||
-            db.parts[idx].image_url ||
-            partSvg(payload.name.trim().slice(0, 24).toUpperCase(), '#FF7A1F'),
-          vehicle_ids: Array.isArray(payload.vehicle_ids) ? payload.vehicle_ids : [],
-        };
-        db.parts[idx] = updated;
-        this.writeDb(db);
-        return this.ok({ data: this.hydratePart(updated, db.vehicles) });
-      }
-
-      if (partIdMatch && method === 'DELETE') {
-        const id = Number(partIdMatch[1]);
-        db.parts = db.parts.filter(p => p.id !== id);
-        this.writeDb(db);
-        return this.ok({ message: 'Pièce supprimée.' });
-      }
-
-      if (method === 'POST' && path === '/admin/vehicles') {
-        const make = String(body['make'] ?? '').trim();
-        const model = String(body['model'] ?? '').trim();
-        const year = Number(body['year'] ?? 0);
-        if (!make || !model || year < 1980 || year > 2030) {
-          return this.err(422, 'Veuillez saisir une marque, un modèle et une année valide.');
+        const status = body['status'] as OrderStatus;
+        if (!transitions[order.status].includes(status))
+          return this.err(422, 'Transition interdite.');
+        if (status === 'cancelled' && order.stock_reserved) {
+          for (const item of order.items) {
+            const part = db.parts.find((p) => p.reference === item.reference);
+            if (part) part.stock += item.quantity;
+          }
+          order.stock_reserved = false;
         }
-        const duplicate = db.vehicles.find(
-          v => v.make.toLowerCase() === make.toLowerCase() && v.model.toLowerCase() === model.toLowerCase() && v.year === year,
-        );
-        if (duplicate) return this.err(422, 'Ce véhicule existe déjà dans la base.');
-        const id = Math.max(0, ...db.vehicles.map(v => v.id)) + 1;
-        const v: Vehicle = { id, make, model, year };
-        db.vehicles.push(v);
+        order.status = status;
         this.writeDb(db);
-        return this.ok({ data: v }, 201);
+        return this.ok(this.order(order));
       }
-
-      const vehicleIdMatch = path.match(/^\/admin\/vehicles\/(\d+)$/);
-      if (vehicleIdMatch && method === 'DELETE') {
-        const id = Number(vehicleIdMatch[1]);
-        db.vehicles = db.vehicles.filter(v => v.id !== id);
-        for (const p of db.parts) {
-          p.vehicle_ids = p.vehicle_ids.filter(vid => vid !== id);
+      const adminPartMatch = path.match(/^\/admin\/parts(?:\/(\d+))?(?:\/(vehicles))?$/);
+      if (adminPartMatch) {
+        const id = Number(adminPartMatch[1] ?? 0);
+        const part = db.parts.find((p) => p.id === id);
+        if (method === 'PUT' && id && adminPartMatch[2] === 'vehicles') {
+          if (!part) return this.err(404, 'Pièce introuvable.');
+          if (
+            !Array.isArray(body['vehicle_ids']) ||
+            body['vehicle_ids'].some(
+              (v: number) => !db.vehicles.some((vehicle) => vehicle.id === v),
+            )
+          )
+            return this.err(422, 'Véhicules invalides.');
+          part.vehicle_ids = body['vehicle_ids'];
+          this.writeDb(db);
+          return this.ok({ message: 'Compatibilité mise à jour.' });
         }
-        this.writeDb(db);
-        return this.ok({ message: 'Véhicule supprimé.' });
+        if (method === 'DELETE' && id) {
+          if (!part) return this.err(404, 'Pièce introuvable.');
+          if (db.orders.some((o) => o.items.some((item) => item.reference === part.reference)))
+            return this.err(409, 'Pièce déjà référencée dans une commande.');
+          db.parts = db.parts.filter((p) => p.id !== id);
+          this.writeDb(db);
+          return this.ok(null, 204);
+        }
+        if ((method === 'POST' && !id) || (method === 'PUT' && id)) {
+          if (id && !part) return this.err(404, 'Pièce introuvable.');
+          const value = (key: string): any =>
+            req.body instanceof FormData ? req.body.get(key) : body[key];
+          const name = String(value('name') ?? part?.name ?? '').trim();
+          const reference = String(value('reference') ?? part?.reference ?? '').trim();
+          const price = Number(value('price') ?? part?.price ?? -1);
+          const stock = Number(value('stock') ?? part?.stock ?? -1);
+          if (
+            !name ||
+            !reference ||
+            price < 0 ||
+            stock < 0 ||
+            (!id && (!value('category_id') || !value('brand_id')))
+          )
+            return this.err(422, 'Vérifiez les champs de la pièce.');
+          if (db.parts.some((p) => p.id !== id && p.reference === reference))
+            return this.err(422, 'Référence déjà utilisée.');
+          const categoryId = Number(value('category_id') ?? 0);
+          const brandId = Number(value('brand_id') ?? 0);
+          const updated: DemoPartRecord = {
+            id: id || Math.max(0, ...db.parts.map((p) => p.id)) + 1,
+            name,
+            reference,
+            oem_number: value('oem_number') || null,
+            description: value('description') || null,
+            price,
+            stock,
+            category: categoryId
+              ? (PART_CATEGORIES[categoryId - 1] ?? `Catégorie ${categoryId}`)
+              : (part?.category ?? null),
+            brand: brandId ? `Marque ${brandId}` : (part?.brand ?? null),
+            image_url: part?.image_url ?? partSvg(name.slice(0, 24).toUpperCase(), '#FF7A1F'),
+            vehicle_ids: part?.vehicle_ids ?? [],
+          };
+          if (part) db.parts[db.parts.indexOf(part)] = updated;
+          else db.parts.push(updated);
+          this.writeDb(db);
+          return this.ok(this.part(updated, db.vehicles), id ? 200 : 201);
+        }
       }
     }
-
     return this.err(404, `Endpoint non pris en charge en mode démo (${method} ${path}).`);
   }
 }
-
-function isBackendUnreachable(err: HttpErrorResponse): boolean {
-  if (err.status === 0 || err.status === 502 || err.status === 503 || err.status === 504) {
-    return true;
-  }
-  // Dev-server proxy returns HTTP 500 plain-text/HTML when http://127.0.0.1:8000 refuses TCP connection
-  if (err.status === 500 && (!err.error || typeof err.error === 'string')) {
-    return true;
-  }
-  return false;
-}
-
-export const demoFallbackInterceptor: HttpInterceptorFn = (req, next) => {
-  if (!environment.demoFallback || !req.url.startsWith(environment.apiUrl)) {
-    return next(req);
-  }
-  const demo = inject(DemoBackendService);
-  if (demo.isActive()) {
-    return demo.handle(req);
-  }
-  return next(req).pipe(
-    catchError((err: HttpErrorResponse) => {
-      if (isBackendUnreachable(err)) {
-        return demo.handle(req);
-      }
-      return throwError(() => err);
-    }),
-  );
-};

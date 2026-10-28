@@ -17,28 +17,30 @@ const samplePart: Part = {
 
 describe('CartStore', () => {
   let cart: CartStore;
-
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     TestBed.configureTestingModule({});
     cart = TestBed.inject(CartStore);
   });
 
-  it('adds items, caps quantity at stock, and computes subtotal & free shipping', () => {
+  it('adds items, caps quantity at stock and computes the subtotal', () => {
     expect(cart.isEmpty()).toBe(true);
     expect(cart.add(samplePart, 2)).toBe(true);
     expect(cart.totalItems()).toBe(2);
     expect(cart.subtotal()).toBe(50000);
-    expect(cart.shippingFor('Douala')).toBe(2000);
-
-    // Adding more than remaining stock caps at 3
     expect(cart.add(samplePart, 5)).toBe(true);
     expect(cart.totalItems()).toBe(3);
-
-    // Already at max stock
     expect(cart.add(samplePart, 1)).toBe(false);
-
     cart.remove(samplePart.id);
     expect(cart.isEmpty()).toBe(true);
+  });
+
+  it('rejects fractional and invalid quantities', () => {
+    expect(cart.add(samplePart, 1.5)).toBe(false);
+    expect(cart.add(samplePart, NaN)).toBe(false);
+    cart.add(samplePart);
+    cart.setQuantity(samplePart.id, 2.5);
+    expect(cart.totalItems()).toBe(1);
   });
 });

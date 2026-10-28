@@ -3,6 +3,7 @@ import { Component, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthStore } from '../../../core/auth';
+import { DemoModeService } from '../../../core/demo-mode';
 import { ToastStore } from '../../../core/toast';
 import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
 
@@ -22,7 +23,9 @@ import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
             AUTO<span class="text-accent">CARWAT</span>
           </a>
           <h1 class="mb-1 font-display text-3xl font-bold text-primary">Connexion</h1>
-          <p class="mb-5 text-sm text-muted">Accédez à votre espace client ou administrateur AutoCarWat.</p>
+          <p class="mb-5 text-sm text-muted">
+            Accédez à votre espace client ou administrateur AutoCarWat.
+          </p>
 
           <label class="mb-1 block text-sm font-medium" for="email">Adresse e-mail</label>
           <input
@@ -85,34 +88,38 @@ import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
           </p>
         </form>
 
-        <!-- Accès rapide démo -->
-        <div class="rounded-2xl border border-line bg-surface p-4 text-xs">
-          <p class="mb-2 font-semibold text-muted">Accès rapide (comptes de test) :</p>
-          <div class="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              (click)="fillDemo('client')"
-              class="rounded-lg border border-line bg-bg px-3 py-2 text-left hover:border-action"
-            >
-              <span class="block font-semibold text-text">👤 Compte Client</span>
-              <span class="text-muted">client&#64;autocarwat.cm</span>
-            </button>
-            <button
-              type="button"
-              (click)="fillDemo('admin')"
-              class="rounded-lg border border-line bg-bg px-3 py-2 text-left hover:border-action"
-            >
-              <span class="block font-semibold text-text">🛡️ Compte Admin</span>
-              <span class="text-muted">admin&#64;autocarwat.cm</span>
-            </button>
+        <!-- Accès rapide uniquement après activation explicite du mode démo. -->
+        @if (demo.isActive()) {
+          <div class="rounded-2xl border border-line bg-surface p-4 text-xs">
+            <p class="mb-2 font-semibold text-muted">Accès rapide (comptes de test) :</p>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                (click)="fillDemo('client')"
+                class="rounded-lg border border-line bg-bg px-3 py-2 text-left hover:border-action"
+              >
+                <span class="block font-semibold text-text">👤 Compte Client</span>
+                <span class="text-muted">client&#64;autocarwat.cm</span>
+              </button>
+              <button
+                type="button"
+                (click)="fillDemo('admin')"
+                class="rounded-lg border border-line bg-bg px-3 py-2 text-left hover:border-action"
+              >
+                <span class="block font-semibold text-text">🛡️ Compte Admin</span>
+                <span class="text-muted">admin&#64;autocarwat.cm</span>
+              </button>
+            </div>
+            <p class="mt-3 text-amber-700 dark:text-amber-300">Mode démo : aucun paiement réel.</p>
           </div>
-        </div>
+        }
       </div>
     </div>
   `,
 })
 export class Login {
   private auth = inject(AuthStore);
+  demo = inject(DemoModeService);
   private router = inject(Router);
   private toast = inject(ToastStore);
 
@@ -136,11 +143,11 @@ export class Login {
   }
 
   submit() {
-    if (!this.email.trim() || !this.password) return;
+    if (this.loading() || !this.email.trim() || !this.password) return;
     this.loading.set(true);
     this.error.set('');
     this.auth.login(this.email.trim(), this.password).subscribe({
-      next: u => {
+      next: (u) => {
         this.toast.success(`Bienvenue, ${u.name} !`);
         const target = this.redirect();
         if (target && target.startsWith('/')) {
@@ -156,7 +163,9 @@ export class Login {
             ? 'Trop de tentatives. Réessayez dans une minute.'
             : e.status === 0
               ? 'Impossible de joindre le serveur.'
-              : (e.error?.message ?? 'Identifiants invalides ou erreur serveur.'),
+              : (e.error?.errors?.email?.[0] ??
+                e.error?.message ??
+                'Identifiants invalides ou erreur serveur.'),
         );
       },
     });

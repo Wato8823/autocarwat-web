@@ -3,101 +3,81 @@ import { Injectable, inject } from '@angular/core';
 import { map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
-  AdminStats,
+  LaravelPage,
   Order,
   OrderStatus,
   Part,
   PartUpsertPayload,
   Payment,
-  PaymentOperator,
   PaymentStatus,
-  Vehicle,
+  normalizePage,
 } from './models';
+import { resolvePartImage } from './catalog';
 
 @Injectable({ providedIn: 'root' })
 export class AdminApi {
   private http = inject(HttpClient);
   private api = environment.apiUrl;
 
-  stats() {
+  payments(status: PaymentStatus = 'initiated', page = 1) {
+    const params = new HttpParams().set('status', status).set('page', page);
     return this.http
-      .get<{ data: AdminStats } | AdminStats>(`${this.api}/admin/stats`)
-      .pipe(map(res => ('data' in res ? res.data : res)));
+      .get<LaravelPage<Payment> | Payment[]>(`${this.api}/admin/payments`, { params })
+      .pipe(map(normalizePage<Payment>));
   }
 
-  payments(filters?: { status?: PaymentStatus | ''; operator?: PaymentOperator | ''; search?: string }) {
-    let params = new HttpParams();
-    if (filters?.status) params = params.set('status', filters.status);
-    if (filters?.operator) params = params.set('operator', filters.operator);
-    if (filters?.search?.trim()) params = params.set('search', filters.search.trim());
-    return this.http
-      .get<{ data: Payment[] } | Payment[]>(`${this.api}/admin/payments`, { params })
-      .pipe(map(res => (Array.isArray(res) ? res : res.data)));
+  confirmPayment(id: number) {
+    return this.http.post<Payment>(`${this.api}/admin/payments/${id}/confirm`, {});
   }
 
-  approvePayment(id: number) {
-    return this.http
-      .post<{ data: Payment } | Payment>(`${this.api}/admin/payments/${id}/approve`, {})
-      .pipe(map(res => ('data' in res ? res.data : res)));
+  rejectPayment(id: number) {
+    return this.http.post<Payment>(`${this.api}/admin/payments/${id}/reject`, {});
   }
 
-  rejectPayment(id: number, reason: string) {
+  orders(status: OrderStatus | '' = '', page = 1) {
+    let params = new HttpParams().set('page', page);
+    if (status) params = params.set('status', status);
     return this.http
-      .post<{ data: Payment } | Payment>(`${this.api}/admin/payments/${id}/reject`, {
-        rejection_reason: reason,
-        reason,
-      })
-      .pipe(map(res => ('data' in res ? res.data : res)));
-  }
-
-  orders(filters?: { status?: OrderStatus | ''; search?: string }) {
-    let params = new HttpParams();
-    if (filters?.status) params = params.set('status', filters.status);
-    if (filters?.search?.trim()) params = params.set('search', filters.search.trim());
-    return this.http
-      .get<{ data: Order[] } | Order[]>(`${this.api}/admin/orders`, { params })
-      .pipe(map(res => (Array.isArray(res) ? res : res.data)));
+      .get<LaravelPage<Order> | Order[]>(`${this.api}/admin/orders`, { params })
+      .pipe(map(normalizePage<Order>));
   }
 
   updateOrderStatus(id: number, status: OrderStatus) {
     return this.http
       .patch<{ data: Order } | Order>(`${this.api}/admin/orders/${id}/status`, { status })
-      .pipe(map(res => ('data' in res ? res.data : res)));
-  }
-
-  parts(filters?: { search?: string; category?: string; stock?: 'all' | 'low' | 'out' }) {
-    let params = new HttpParams();
-    if (filters?.search?.trim()) params = params.set('search', filters.search.trim());
-    if (filters?.category?.trim()) params = params.set('category', filters.category.trim());
-    if (filters?.stock && filters.stock !== 'all') params = params.set('stock', filters.stock);
-    return this.http
-      .get<{ data: Part[] } | Part[]>(`${this.api}/admin/parts`, { params })
-      .pipe(map(res => (Array.isArray(res) ? res : res.data)));
+      .pipe(map((res) => ('data' in res ? res.data : res)));
   }
 
   createPart(payload: PartUpsertPayload) {
     return this.http
-      .post<{ data: Part } | Part>(`${this.api}/admin/parts`, payload)
-      .pipe(map(res => ('data' in res ? res.data : res)));
+      .post<{ data: Part } | Part>(`${this.api}/admin/parts`, this.toFormData(payload))
+      .pipe(map((res) => resolvePartImage('data' in res ? res.data : res)));
   }
 
   updatePart(id: number, payload: PartUpsertPayload) {
+    const { image, ...fields } = payload;
+    const body = image ? this.toFormData(payload) : fields;
     return this.http
-      .put<{ data: Part } | Part>(`${this.api}/admin/parts/${id}`, payload)
-      .pipe(map(res => ('data' in res ? res.data : res)));
+      .put<{ data: Part } | Part>(`${this.api}/admin/parts/${id}`, body)
+      .pipe(map((res) => resolvePartImage('data' in res ? res.data : res)));
+  }
+
+  syncPartVehicles(id: number, vehicleIds: number[]) {
+    return this.http.put<{ message: string }>(`${this.api}/admin/parts/${id}/vehicles`, {
+      vehicle_ids: vehicleIds,
+    });
   }
 
   deletePart(id: number) {
-    return this.http.delete(`${this.api}/admin/parts/${id}`);
+    return this.http.delete<void>(`${this.api}/admin/parts/${id}`);
   }
 
-  createVehicle(payload: { make: string; model: string; year: number }) {
-    return this.http
-      .post<{ data: Vehicle } | Vehicle>(`${this.api}/admin/vehicles`, payload)
-      .pipe(map(res => ('data' in res ? res.data : res)));
-  }
-
-  deleteVehicle(id: number) {
-    return this.http.delete(`${this.api}/admin/vehicles/${id}`);
+  private toFormData(payload: PartUpsertPayload): FormData {
+    const data = new FormData();
+    for (const [key, value] of Object.entries(payload)) {
+      if (value === undefined) continue;
+      data.append(key, value instanceof File ? value : value === null ? '' : String(value));
+    }
+    return data;
   }
 }

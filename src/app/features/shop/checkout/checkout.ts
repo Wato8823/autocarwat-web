@@ -2,12 +2,11 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { environment } from '../../../../environments/environment';
-import { fieldErrors, globalError } from '../../../core/api-errors';
 import { AuthStore } from '../../../core/auth';
 import { CartStore } from '../../../core/cart';
-import { CAMEROON_CITIES, CreateOrderPayload, PaymentOperator } from '../../../core/models';
+import { PaymentOperator, normalizeCameroonPhone } from '../../../core/models';
 import { OrdersApi } from '../../../core/orders';
+import { PaymentSessionStore } from '../../../core/payment-session';
 import { ToastStore } from '../../../core/toast';
 import { FcfaPipe } from '../../../shared/fcfa-pipe';
 
@@ -16,319 +15,190 @@ import { FcfaPipe } from '../../../shared/fcfa-pipe';
   imports: [FormsModule, RouterLink, FcfaPipe],
   template: `
     <div class="mb-6">
-      <a routerLink="/panier" class="text-sm text-muted underline hover:text-primary">
-        ← Retour au panier
-      </a>
+      <a routerLink="/panier" class="text-sm text-muted underline hover:text-primary"
+        >← Retour au panier</a
+      >
       <h1 class="mt-1 font-display text-4xl font-bold text-primary">Finaliser ma commande</h1>
+      <p class="mt-1 text-sm text-muted">Un paiement simple, en toute transparence.</p>
     </div>
 
-    @if (cart.isEmpty()) {
+    @if (submitting() && cart.isEmpty()) {
+      <div class="rounded-2xl border border-line bg-surface p-8 text-center" role="status">
+        <p class="font-semibold text-primary">
+          Commande enregistrée. Préparation des instructions de paiement…
+        </p>
+        <p class="mt-2 text-sm text-muted">
+          Ne fermez pas cette page. Vous retrouverez votre commande dans « Mes commandes ».
+        </p>
+      </div>
+    } @else if (cart.isEmpty()) {
       <div class="rounded-2xl border border-line bg-surface p-8 text-center">
         <p class="text-lg font-semibold">Votre panier est vide.</p>
         <a
           routerLink="/pieces"
           class="mt-4 inline-flex h-11 items-center rounded-lg bg-action px-5 font-semibold text-on-action"
+          >Parcourir le catalogue</a
         >
-          Parcourir le catalogue
-        </a>
       </div>
     } @else {
       <form (ngSubmit)="submit()" class="grid gap-6 lg:grid-cols-12">
-        <div class="space-y-6 lg:col-span-7">
-          <!-- Étape 1 : Livraison -->
+        <div class="space-y-5 lg:col-span-7">
           <section class="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-            <h2 class="mb-4 font-display text-2xl font-bold text-primary">
-              1. Coordonnées & Adresse de livraison
-            </h2>
-
-            <div class="grid gap-4 sm:grid-cols-2">
+            <div class="mb-5 flex items-start gap-3">
+              <span
+                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-action/10 text-xl"
+                aria-hidden="true"
+                >📱</span
+              >
               <div>
-                <label class="mb-1 block text-sm font-medium" for="cname">Nom du destinataire *</label>
-                <input
-                  id="cname"
-                  name="cname"
-                  [ngModel]="customerName()"
-                  (ngModelChange)="customerName.set($event)"
-                  required
-                  class="h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm"
-                />
-                @if (errors()['customer_name']) {
-                  <p class="mt-1 text-xs text-red-600">{{ errors()['customer_name'] }}</p>
-                }
-              </div>
-
-              <div>
-                <label class="mb-1 block text-sm font-medium" for="cphone">Téléphone joignable *</label>
-                <input
-                  id="cphone"
-                  name="cphone"
-                  type="tel"
-                  [ngModel]="customerPhone()"
-                  (ngModelChange)="customerPhone.set($event)"
-                  required
-                  placeholder="Ex. 694 12 34 56"
-                  class="num h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm"
-                />
-                @if (errors()['customer_phone']) {
-                  <p class="mt-1 text-xs text-red-600">{{ errors()['customer_phone'] }}</p>
-                }
+                <h2 class="font-display text-2xl font-bold text-primary">Paiement Mobile Money</h2>
+                <p class="mt-1 text-sm text-muted">
+                  Choisissez votre opérateur et indiquez uniquement le numéro qui effectuera le
+                  paiement.
+                </p>
               </div>
             </div>
 
-            <div class="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label class="mb-1 block text-sm font-medium" for="scity">Ville *</label>
-                <select
-                  id="scity"
-                  name="scity"
-                  [ngModel]="shippingCity()"
-                  (ngModelChange)="shippingCity.set($event)"
-                  class="h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm"
+            <fieldset>
+              <legend class="mb-2 text-sm font-semibold">Votre opérateur</legend>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <label
+                  class="flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition"
+                  [class]="
+                    operator() === 'orange'
+                      ? 'border-action bg-orange-50/70 dark:bg-orange-950/30'
+                      : 'border-line bg-bg'
+                  "
                 >
-                  @for (c of cities; track c.name) {
-                    <option [value]="c.name">{{ c.name }} ({{ c.delay }})</option>
-                  }
-                </select>
+                  <input
+                    type="radio"
+                    name="provider"
+                    value="orange"
+                    [ngModel]="operator()"
+                    (ngModelChange)="operator.set($event)"
+                    class="accent-[#F26A0F]"
+                  />
+                  <span class="text-xl" aria-hidden="true">🟠</span>
+                  <span class="font-bold">Orange Money</span>
+                </label>
+                <label
+                  class="flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition"
+                  [class]="
+                    operator() === 'mtn'
+                      ? 'border-action bg-yellow-50/70 dark:bg-yellow-950/30'
+                      : 'border-line bg-bg'
+                  "
+                >
+                  <input
+                    type="radio"
+                    name="provider"
+                    value="mtn"
+                    [ngModel]="operator()"
+                    (ngModelChange)="operator.set($event)"
+                    class="accent-[#F26A0F]"
+                  />
+                  <span class="text-xl" aria-hidden="true">🟡</span>
+                  <span class="font-bold">MTN Mobile Money</span>
+                </label>
               </div>
+            </fieldset>
 
-              <div>
-                <label class="mb-1 block text-sm font-medium" for="saddr">Quartier & repère précis *</label>
-                <input
-                  id="saddr"
-                  name="saddr"
-                  [ngModel]="shippingAddress()"
-                  (ngModelChange)="shippingAddress.set($event)"
-                  required
-                  placeholder="Ex. Akwa, face Pharmacie du Centre"
-                  class="h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm"
-                />
-                @if (errors()['shipping_address']) {
-                  <p class="mt-1 text-xs text-red-600">{{ errors()['shipping_address'] }}</p>
-                }
-              </div>
-            </div>
-
-            <div class="mt-4">
-              <label class="mb-1 block text-sm font-medium" for="snotes">
-                Instructions pour le livreur <span class="text-xs font-normal text-muted">(optionnel)</span>
-              </label>
+            <div class="mt-5">
+              <label for="payer-phone" class="mb-1 block text-sm font-semibold"
+                >Votre numéro Mobile Money</label
+              >
               <input
-                id="snotes"
-                name="snotes"
-                [ngModel]="notes()"
-                (ngModelChange)="notes.set($event)"
-                placeholder="Ex. Appeler 15 minutes avant l'arrivée…"
-                class="h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm"
+                id="payer-phone"
+                name="phone"
+                type="tel"
+                inputmode="tel"
+                autocomplete="tel"
+                [ngModel]="phone()"
+                (ngModelChange)="phone.set($event)"
+                (blur)="phoneTouched.set(true)"
+                [attr.aria-invalid]="phoneTouched() && !validPhone() ? 'true' : null"
+                aria-describedby="phone-help"
+                required
+                placeholder="Ex. 694 12 34 56"
+                class="num h-12 w-full rounded-lg border border-line bg-bg px-3 text-sm focus-visible:outline-2 focus-visible:outline-action"
               />
+              <p id="phone-help" class="mt-1.5 text-xs text-muted">
+                9 chiffres commençant par 6, avec ou sans l’indicatif +237.
+              </p>
+              @if (phoneTouched() && !validPhone()) {
+                <p class="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
+                  Saisissez un numéro camerounais valide.
+                </p>
+              }
             </div>
           </section>
 
-          <!-- Étape 2 : Paiement Mobile Money -->
           <section class="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-            <h2 class="mb-1 font-display text-2xl font-bold text-primary">
-              2. Paiement Mobile Money
-            </h2>
-            <p class="mb-4 text-sm text-muted">
-              Effectuez le règlement sur notre compte marchand puis indiquez la référence SMS pour validation par l’administrateur.
+            <h2 class="font-display text-xl font-bold text-primary">Comment ça marche ?</h2>
+            <ol class="mt-4 space-y-3 text-sm">
+              <li class="flex gap-3">
+                <span
+                  class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-bg font-bold text-primary"
+                  >1</span
+                ><span
+                  >La commande est créée et les coordonnées de paiement sont fournies par la
+                  boutique.</span
+                >
+              </li>
+              <li class="flex gap-3">
+                <span
+                  class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-bg font-bold text-primary"
+                  >2</span
+                ><span
+                  >Effectuez le transfert depuis votre téléphone à l’aide des instructions
+                  affichées.</span
+                >
+              </li>
+              <li class="flex gap-3">
+                <span
+                  class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-bg font-bold text-primary"
+                  >3</span
+                ><span
+                  >Saisissez la référence reçue par SMS. Un administrateur vérifiera ensuite votre
+                  paiement.</span
+                >
+              </li>
+            </ol>
+            <p class="mt-4 rounded-xl bg-bg p-3 text-xs text-muted">
+              🔒 Votre code PIN reste sur votre téléphone. Ne le saisissez jamais sur ce site et ne
+              le partagez pas.
             </p>
-
-            <!-- Choix opérateur -->
-            <div class="grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                (click)="operator.set('orange_money')"
-                class="flex items-center gap-3 rounded-xl border-2 p-3.5 text-left transition"
-                [class]="
-                  operator() === 'orange_money'
-                    ? 'border-action bg-orange-50/70 dark:bg-orange-950/30'
-                    : 'border-line bg-bg'
-                "
-              >
-                <span class="text-2xl" aria-hidden="true">🟠</span>
-                <div>
-                  <span class="block font-bold">Orange Money</span>
-                  <span class="num text-xs text-muted">{{ merchant.orangeMoney.code }}</span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                (click)="operator.set('mtn_momo')"
-                class="flex items-center gap-3 rounded-xl border-2 p-3.5 text-left transition"
-                [class]="
-                  operator() === 'mtn_momo'
-                    ? 'border-action bg-yellow-50/70 dark:bg-yellow-950/30'
-                    : 'border-line bg-bg'
-                "
-              >
-                <span class="text-2xl" aria-hidden="true">🟡</span>
-                <div>
-                  <span class="block font-bold">MTN Mobile Money</span>
-                  <span class="num text-xs text-muted">{{ merchant.mtnMomo.code }}</span>
-                </div>
-              </button>
-            </div>
-
-            <!-- Instructions marchand -->
-            <div class="mt-4 rounded-xl border border-line bg-bg p-4 text-sm">
-              <p class="font-semibold text-primary">
-                Coordonnées de paiement {{ operator() === 'orange_money' ? 'Orange Money' : 'MTN MoMo' }} :
-              </p>
-              <div class="mt-2 grid gap-2 sm:grid-cols-3">
-                <div>
-                  <span class="block text-xs text-muted">Numéro marchand</span>
-                  <button
-                    type="button"
-                    (click)="copy(activeMerchant().number)"
-                    class="num font-bold hover:text-action"
-                  >
-                    {{ activeMerchant().number }} 📋
-                  </button>
-                </div>
-                <div>
-                  <span class="block text-xs text-muted">Nom du compte</span>
-                  <span class="font-bold">{{ activeMerchant().holder }}</span>
-                </div>
-                <div>
-                  <span class="block text-xs text-muted">Montant exact</span>
-                  <span class="num font-bold text-primary">{{ total() | fcfa }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Option envoyer maintenant vs plus tard -->
-            <div class="mt-4 flex flex-wrap gap-3 text-sm">
-              <label class="flex cursor-pointer items-center gap-2">
-                <input
-                  type="radio"
-                  name="payTiming"
-                  [checked]="submitProofNow()"
-                  (change)="submitProofNow.set(true)"
-                  class="accent-[#F26A0F]"
-                />
-                <span class="font-medium">J'ai déjà payé — envoyer la référence maintenant</span>
-              </label>
-              <label class="flex cursor-pointer items-center gap-2">
-                <input
-                  type="radio"
-                  name="payTiming"
-                  [checked]="!submitProofNow()"
-                  (change)="submitProofNow.set(false)"
-                  class="accent-[#F26A0F]"
-                />
-                <span class="text-muted">Payer et envoyer la référence juste après</span>
-              </label>
-            </div>
-
-            @if (submitProofNow()) {
-              <div class="mt-4 space-y-4 border-t border-line pt-4">
-                <div class="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label class="mb-1 block text-sm font-medium" for="sphone">
-                      Numéro émetteur {{ operator() === 'orange_money' ? 'OM' : 'MoMo' }} *
-                    </label>
-                    <input
-                      id="sphone"
-                      name="sphone"
-                      type="tel"
-                      [ngModel]="senderPhone()"
-                      (ngModelChange)="senderPhone.set($event)"
-                      required
-                      placeholder="Ex. 694 12 34 56"
-                      class="num h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="mb-1 block text-sm font-medium" for="txref">
-                      Référence / ID de transaction SMS *
-                    </label>
-                    <input
-                      id="txref"
-                      name="txref"
-                      [ngModel]="transactionRef()"
-                      (ngModelChange)="transactionRef.set($event)"
-                      required
-                      placeholder="Ex. MP261028.1432.A84921"
-                      class="num h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm uppercase"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label class="mb-1 block text-sm font-medium" for="proof">
-                    Capture d’écran du SMS / reçu <span class="text-xs font-normal text-muted">(optionnel, max 2 Mo)</span>
-                  </label>
-                  <input
-                    id="proof"
-                    type="file"
-                    accept="image/*"
-                    (change)="onFileSelected($event)"
-                    class="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white dark:file:text-[#0F1B2A]"
-                  />
-                  @if (proofPreview()) {
-                    <div class="mt-2 flex items-center gap-3">
-                      <img
-                        [src]="proofPreview()!"
-                        alt="Aperçu justificatif"
-                        class="h-16 w-16 rounded-lg border border-line object-cover"
-                      />
-                      <span class="truncate text-xs text-muted">{{ proofName() }}</span>
-                      <button
-                        type="button"
-                        (click)="clearProof()"
-                        class="text-xs text-red-600 underline"
-                      >
-                        Supprimer
-                      </button>
-                    </div>
-                  }
-                </div>
-              </div>
-            }
           </section>
         </div>
 
-        <!-- Colonne Récapitulatif -->
         <aside class="lg:col-span-5">
           <div class="sticky top-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
             <h2 class="mb-4 font-display text-2xl font-bold text-primary">
-              Votre commande ({{ cart.totalItems() }})
+              Votre commande <span class="text-muted">({{ cart.totalItems() }})</span>
             </h2>
-
             <ul class="max-h-64 divide-y divide-line overflow-y-auto pr-1 text-sm">
               @for (item of cart.items(); track item.part.id) {
-                <li class="flex items-center justify-between gap-3 py-2.5">
+                <li class="flex justify-between gap-3 py-3">
                   <div class="min-w-0">
-                    <p class="truncate font-medium">{{ item.part.name }}</p>
+                    <p class="font-medium">{{ item.part.name }}</p>
                     <p class="num text-xs text-muted">
                       Qté {{ item.quantity }} × {{ item.part.price | fcfa }}
                     </p>
                   </div>
-                  <span class="num shrink-0 font-semibold">
-                    {{ item.part.price * item.quantity | fcfa }}
-                  </span>
+                  <span class="num shrink-0 font-semibold">{{
+                    item.part.price * item.quantity | fcfa
+                  }}</span>
                 </li>
               }
             </ul>
-
-            <dl class="mt-4 space-y-2 border-t border-line pt-4 text-sm">
-              <div class="flex justify-between">
-                <dt class="text-muted">Sous-total</dt>
-                <dd class="num font-semibold">{{ cart.subtotal() | fcfa }}</dd>
-              </div>
-              <div class="flex justify-between">
-                <dt class="text-muted">Livraison ({{ shippingCity() }})</dt>
-                <dd class="num font-semibold">
-                  {{ shippingFee() === 0 ? 'Offerte' : (shippingFee() | fcfa) }}
-                </dd>
-              </div>
-              <div class="flex justify-between border-t border-line pt-3 text-base font-bold">
-                <dt>Total à payer</dt>
-                <dd class="num text-xl text-primary">{{ total() | fcfa }}</dd>
-              </div>
-            </dl>
-
+            <div class="mt-3 flex justify-between border-t border-line pt-4 font-bold">
+              <span>Total estimé</span
+              ><span class="num text-xl text-primary">{{ cart.subtotal() | fcfa }}</span>
+            </div>
+            <p class="mt-2 text-xs text-muted">
+              Le montant final et la disponibilité sont confirmés par l’API lors de la création de
+              la commande.
+            </p>
             @if (error()) {
               <p
                 role="alert"
@@ -337,19 +207,12 @@ import { FcfaPipe } from '../../../shared/fcfa-pipe';
                 {{ error() }}
               </p>
             }
-
             <button
               type="submit"
-              [disabled]="submitting() || !canSubmit()"
+              [disabled]="submitting() || !validPhone()"
               class="mt-5 h-12 w-full rounded-lg bg-action font-semibold text-on-action transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {{
-                submitting()
-                  ? 'Enregistrement…'
-                  : submitProofNow()
-                    ? 'Valider ma commande & envoyer la preuve'
-                    : 'Enregistrer ma commande'
-              }}
+              {{ submitting() ? 'Création en cours…' : 'Créer la commande et continuer →' }}
             </button>
           </div>
         </aside>
@@ -361,111 +224,60 @@ export class Checkout {
   cart = inject(CartStore);
   private auth = inject(AuthStore);
   private ordersApi = inject(OrdersApi);
+  private sessions = inject(PaymentSessionStore);
   private toast = inject(ToastStore);
   private router = inject(Router);
 
-  cities = CAMEROON_CITIES;
-  merchant = environment.merchant;
-
-  customerName = signal(this.auth.user()?.name ?? '');
-  customerPhone = signal(this.auth.user()?.phone ?? '');
-  shippingCity = signal(CAMEROON_CITIES[0].name);
-  shippingAddress = signal('');
-  notes = signal('');
-
-  operator = signal<PaymentOperator>('orange_money');
-  submitProofNow = signal(true);
-  senderPhone = signal(this.auth.user()?.phone ?? '');
-  transactionRef = signal('');
-  proofPreview = signal<string | null>(null);
-  proofName = signal<string | null>(null);
-
+  operator = signal<PaymentOperator>('orange');
+  phone = signal('');
+  phoneTouched = signal(false);
   submitting = signal(false);
   error = signal('');
-  errors = signal<Record<string, string>>({});
-
-  shippingFee = computed(() => this.cart.shippingFor(this.shippingCity()));
-  total = computed(() => this.cart.subtotal() + this.shippingFee());
-
-  activeMerchant = computed(() =>
-    this.operator() === 'orange_money' ? this.merchant.orangeMoney : this.merchant.mtnMomo,
-  );
-
-  canSubmit = computed(() => {
-    const baseOk =
-      !!this.customerName().trim() &&
-      !!this.customerPhone().trim() &&
-      !!this.shippingCity().trim() &&
-      !!this.shippingAddress().trim() &&
-      !this.cart.isEmpty();
-    if (!baseOk) return false;
-    if (this.submitProofNow()) {
-      return !!this.senderPhone().trim() && !!this.transactionRef().trim();
-    }
-    return true;
-  });
-
-  copy(text: string) {
-    navigator.clipboard?.writeText(text.replace(/\s+/g, ''));
-    this.toast.info(`Numéro ${text} copié.`);
-  }
-
-  onFileSelected(ev: Event) {
-    const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      this.toast.error('L’image dépasse la limite de 2 Mo.');
-      input.value = '';
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.proofPreview.set(typeof reader.result === 'string' ? reader.result : null);
-      this.proofName.set(file.name);
-    };
-    reader.readAsDataURL(file);
-  }
-
-  clearProof() {
-    this.proofPreview.set(null);
-    this.proofName.set(null);
-  }
+  validPhone = computed(() => normalizeCameroonPhone(this.phone()) !== null);
 
   submit() {
-    if (!this.canSubmit()) return;
+    const phone = normalizeCameroonPhone(this.phone());
+    if (this.submitting() || !phone || this.cart.isEmpty()) return;
     this.submitting.set(true);
     this.error.set('');
-    this.errors.set({});
+    const userId = this.auth.user()?.id;
+    const provider = this.operator();
+    const items = this.cart.items().map((i) => ({ part_id: i.part.id, quantity: i.quantity }));
 
-    const payload: CreateOrderPayload = {
-      customer_name: this.customerName().trim(),
-      customer_phone: this.customerPhone().trim(),
-      shipping_city: this.shippingCity().trim(),
-      shipping_address: this.shippingAddress().trim(),
-      notes: this.notes().trim() || undefined,
-      items: this.cart.items().map(i => ({ part_id: i.part.id, quantity: i.quantity })),
-      payment: this.submitProofNow()
-        ? {
-            operator: this.operator(),
-            sender_phone: this.senderPhone().trim(),
-            transaction_ref: this.transactionRef().trim(),
-            proof_url: this.proofPreview(),
-            proof_name: this.proofName(),
-          }
-        : undefined,
-    };
-
-    this.ordersApi.create(payload).subscribe({
-      next: order => {
+    this.ordersApi.create({ items }).subscribe({
+      next: (order) => {
+        // Dès que l'API a créé la commande, ne jamais recréer les mêmes articles sur une erreur de paiement.
         this.cart.clear();
-        this.toast.success(`Commande ${order.order_number} créée avec succès !`);
-        this.router.navigate(['/commandes', order.id]);
+        this.ordersApi.initiatePayment(order.id, { provider, phone }).subscribe({
+          next: (instructions) => {
+            if (userId != null) this.sessions.saveInstructions(userId, order.id, instructions);
+            this.toast.success(
+              `Commande n°${order.id} créée. Suivez les instructions de paiement.`,
+            );
+            this.router.navigate(['/commandes', order.id], {
+              state: { orderId: order.id, instructions },
+            });
+          },
+          error: (e: HttpErrorResponse) => {
+            const message =
+              e.error?.message || 'Impossible de préparer les instructions de paiement.';
+            this.toast.error('Commande créée, mais le paiement n’a pas pu être initié.');
+            this.router.navigate(['/commandes', order.id], {
+              state: { orderId: order.id, paymentStartError: message },
+            });
+          },
+        });
       },
       error: (e: HttpErrorResponse) => {
         this.submitting.set(false);
-        this.errors.set(fieldErrors(e));
-        this.error.set(globalError(e) || e.error?.message || 'Erreur lors de la commande.');
+        const message =
+          e.error?.message ||
+          (e.status === 0
+            ? 'Impossible de joindre le serveur.'
+            : 'Impossible de créer la commande.');
+        this.error.set(
+          `${message} Si la connexion a été interrompue, vérifiez vos commandes avant de réessayer.`,
+        );
       },
     });
   }
