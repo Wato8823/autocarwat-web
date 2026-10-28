@@ -1,5 +1,3 @@
-/* You can add global styles to this file, and also import other style files */
-
 @import "tailwindcss";
 
 /* Variante "dark" pilotée par l'attribut data-theme (et non par le réglage du téléphone) */
@@ -34,20 +32,27 @@
   --color-on-action: var(--on-action);
   --color-accent: var(--accent);
   --color-line: var(--border);
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-display: "Barlow Condensed", "Inter", sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Barlow Condensed", "Inter", system-ui, sans-serif;
 }
 
-html { font-size: 16px; }
+html { font-size: 16px; scroll-behavior: smooth; }
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
   line-height: 1.5;
+  min-height: 100dvh;
+}
+
+button:not(:disabled),
+[role="button"]:not(:disabled),
+select:not(:disabled) {
+  cursor: pointer;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  body, .themed { transition: background-color .25s, color .25s, border-color .25s; }
+  body, .themed { transition: background-color .2s, color .2s, border-color .2s; }
 }
 
 /* Chiffres alignés pour prix et références */

@@ -1,5 +1,18 @@
-
-// url à update for production
+// URL de l'API en production (via reverse-proxy ou domaine API dédié)
 export const environment = {
-  apiUrl: 'http://127.0.0.1:8000/api',
+  production: true,
+  apiUrl: '/api',
+  demoFallback: true,
+  merchant: {
+    orangeMoney: {
+      number: '699 45 12 80',
+      code: '#150*47*882301#',
+      holder: 'AUTOCARWAT SARL',
+    },
+    mtnMomo: {
+      number: '677 88 23 10',
+      code: '*126*4*642190#',
+      holder: 'AUTOCARWAT SARL',
+    },
+  },
 };

@@ -8,6 +8,7 @@ export interface User {
   id: number;
   name: string;
   email: string;
+  phone?: string | null;
   is_admin: boolean;
 }
 
@@ -29,7 +30,13 @@ export class AuthStore {
     );
   }
 
-  register(data: { name: string; email: string; password: string; password_confirmation: string }) {
+  register(data: {
+    name: string;
+    email: string;
+    phone?: string;
+    password: string;
+    password_confirmation: string;
+  }) {
     return this.http.post<{ token: string }>(`${this.api}/register`, data).pipe(
       tap(r => this.setToken(r.token)),
       switchMap(() => this.loadUser()),
