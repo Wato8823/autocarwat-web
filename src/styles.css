@@ -1,1 +1,54 @@
 /* You can add global styles to this file, and also import other style files */
+
+@import "tailwindcss";
+
+/* Variante "dark" pilotée par l'attribut data-theme (et non par le réglage du téléphone) */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Thème clair (par défaut) */
+:root {
+  --bg: #F6F7F9;       --surface: #FFFFFF;
+  --text: #0F1B2A;     --text-muted: #51606F;
+  --primary: #0F2A43;  --action: #F26A0F;
+  --on-action: #0F1B2A;
+  --accent: #FFB703;   --border: #DDE3EA;
+}
+
+/* Thème sombre */
+[data-theme="dark"] {
+  --bg: #0E1620;       --surface: #16212E;
+  --text: #EAF0F6;     --text-muted: #9FB0C1;
+  --primary: #5AA9F0;  --action: #FF7A1F;
+  --on-action: #0F1B2A;
+  --accent: #FFC233;   --border: #27374A;
+}
+
+/* Les variables deviennent des classes Tailwind : bg-surface, text-muted, bg-action... */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-primary: var(--primary);
+  --color-action: var(--action);
+  --color-on-action: var(--on-action);
+  --color-accent: var(--accent);
+  --color-line: var(--border);
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Inter", sans-serif;
+}
+
+html { font-size: 16px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  body, .themed { transition: background-color .25s, color .25s, border-color .25s; }
+}
+
+/* Chiffres alignés pour prix et références */
+.num { font-variant-numeric: tabular-nums; }
