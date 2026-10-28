@@ -10,7 +10,7 @@ import { catchError, firstValueFrom, of } from 'rxjs';
 import { routes } from './app.routes';
 import { apiInterceptor } from './core/api.interceptor';
 import { AuthStore } from './core/auth';
-import { demoFallbackInterceptor } from './core/demo-backend';
+import { demoInterceptor } from './core/demo.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -20,7 +20,7 @@ export const appConfig: ApplicationConfig = {
       withComponentInputBinding(),
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
     ),
-    provideHttpClient(withInterceptors([apiInterceptor, demoFallbackInterceptor])),
+    provideHttpClient(withInterceptors([apiInterceptor, demoInterceptor])),
     provideAppInitializer(() => {
       const obs = inject(AuthStore).restore();
       return obs ? firstValueFrom(obs.pipe(catchError(() => of(null)))) : undefined;

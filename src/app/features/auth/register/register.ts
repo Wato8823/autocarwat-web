@@ -22,7 +22,7 @@ import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
           AUTO<span class="text-accent">CARWAT</span>
         </a>
         <h1 class="mb-1 font-display text-3xl font-bold text-primary">Créer un compte</h1>
-        <p class="mb-5 text-sm text-muted">Commandez vos pièces auto et suivez vos livraisons.</p>
+        <p class="mb-5 text-sm text-muted">Commandez vos pièces auto et suivez vos commandes.</p>
 
         <label class="mb-1 block text-sm font-medium" for="name">Nom complet</label>
         <input
@@ -54,20 +54,6 @@ import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
         @if (errors()['email']) {
           <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ errors()['email'] }}</p>
         }
-
-        <label class="mb-1 mt-4 block text-sm font-medium" for="phone">
-          Téléphone Mobile Money <span class="text-xs font-normal text-muted">(optionnel)</span>
-        </label>
-        <input
-          id="phone"
-          name="phone"
-          type="tel"
-          [ngModel]="phone()"
-          (ngModelChange)="phone.set($event)"
-          autocomplete="tel"
-          placeholder="Ex. 694 12 34 56"
-          class="num h-12 w-full rounded-lg border border-line bg-bg px-3"
-        />
 
         <label class="mb-1 mt-4 block text-sm font-medium" for="password">Mot de passe</label>
         <div class="relative">
@@ -105,7 +91,9 @@ import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
           </li>
         </ul>
 
-        <label class="mb-1 mt-4 block text-sm font-medium" for="confirm">Confirmer le mot de passe</label>
+        <label class="mb-1 mt-4 block text-sm font-medium" for="confirm"
+          >Confirmer le mot de passe</label
+        >
         <input
           id="confirm"
           name="confirm"
@@ -162,7 +150,6 @@ export class Register {
 
   name = signal('');
   email = signal('');
-  phone = signal('');
   password = signal('');
   confirm = signal('');
   show = signal(false);
@@ -194,12 +181,11 @@ export class Register {
       .register({
         name: this.name().trim(),
         email: this.email().trim(),
-        phone: this.phone().trim() || undefined,
         password: this.password(),
         password_confirmation: this.confirm(),
       })
       .subscribe({
-        next: u => {
+        next: (u) => {
           this.toast.success(`Compte créé avec succès. Bienvenue ${u.name} !`);
           const target = this.redirect();
           if (target && target.startsWith('/')) {

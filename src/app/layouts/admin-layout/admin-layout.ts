@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthStore } from '../../core/auth';
-import { DemoBackendService } from '../../core/demo-backend';
+import { DemoModeService } from '../../core/demo-mode';
 import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
 
 @Component({
@@ -14,7 +14,9 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
         <a routerLink="/admin" class="mb-1 font-display text-2xl font-bold tracking-wide">
           AUTO<span class="text-accent">CARWAT</span>
         </a>
-        <div class="mb-6 inline-block w-fit rounded bg-action px-2 py-0.5 text-xs font-bold text-on-action">
+        <div
+          class="mb-6 inline-block w-fit rounded bg-action px-2 py-0.5 text-xs font-bold text-on-action"
+        >
           ADMINISTRATION
         </div>
 
@@ -41,11 +43,14 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
       <div class="flex min-w-0 flex-1 flex-col">
         @if (demo.isActive()) {
           <div class="bg-amber-400 px-4 py-1 text-xs font-medium text-[#0F1B2A]">
-            ⚡ Mode démo actif — Les validations de paiements, statuts de commandes et modifications du catalogue sont enregistrés localement.
+            ⚡ Mode démo actif — Les validations de paiements, statuts de commandes et modifications
+            du catalogue sont enregistrés localement.
           </div>
         }
 
-        <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-surface px-4 py-3">
+        <header
+          class="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-surface px-4 py-3"
+        >
           <button
             type="button"
             (click)="mobileOpen.set(!mobileOpen())"
@@ -55,7 +60,9 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
             {{ mobileOpen() ? '✕' : '☰' }}
           </button>
 
-          <span class="flex-1 font-display text-xl font-bold text-primary">Espace administration</span>
+          <span class="flex-1 font-display text-xl font-bold text-primary"
+            >Espace administration</span
+          >
 
           <app-theme-toggle />
           <a
@@ -74,7 +81,9 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
         </header>
 
         @if (mobileOpen()) {
-          <nav class="flex flex-col gap-1 border-b border-line bg-[#0B1B2B] p-3 text-white md:hidden">
+          <nav
+            class="flex flex-col gap-1 border-b border-line bg-[#0B1B2B] p-3 text-white md:hidden"
+          >
             @for (l of links; track l.path) {
               <a
                 [routerLink]="l.path"
@@ -99,7 +108,7 @@ import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
 })
 export class AdminLayout {
   auth = inject(AuthStore);
-  demo = inject(DemoBackendService);
+  demo = inject(DemoModeService);
   mobileOpen = signal(false);
 
   links = [
